@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Vision Studio AI 视觉工作台" />
+    <title>Vision Studio</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="utility-rail" aria-label="快捷操作">
+        <button id="railProfile" type="button" aria-label="个人与账号">
+          <span class="material-symbols-rounded" aria-hidden="true">account_circle</span>
+          <span class="rail-label">个人与账号</span>
+        </button>
+        <button id="railUpload" type="button" aria-label="上传图片">
+          <span class="material-symbols-rounded" aria-hidden="true">cloud_upload</span>
+          <span class="rail-label">上传图片</span>
+        </button>
+        <button id="railData" type="button" aria-label="查看图像数据">
+          <span class="material-symbols-rounded" aria-hidden="true">photo_prints</span>
+          <span class="rail-label">图像数据</span>
+        </button>
+        <button id="railTeam" type="button" aria-label="小组空间">
+          <span class="material-symbols-rounded" aria-hidden="true">groups</span>
+          <span class="rail-label">小组空间</span>
+        </button>
+        <span class="rail-divider" aria-hidden="true"></span>
+
+        <!-- 退出：点击后从分隔线处分裂成独立小卡片，取消则收缩粘回 -->
+        <span class="logout-slot">
+          <button id="railLogout" class="logout-chip" type="button" aria-label="退出登录">
+            <span class="logout-chip-icon">
+              <span class="material-symbols-rounded" aria-hidden="true">logout</span>
+            </span>
+            <span class="logout-chip-copy">
+              <span class="logout-chip-title">退出登录</span>
+              <span class="logout-chip-note">需要重新登录</span>
+            </span>
+            <span class="logout-chip-action" id="confirmLogout" role="button" tabindex="0">确定</span>
+          </button>
+        </span>
+      </aside>
+
+      <main class="main" id="workspace">
+        <header class="app-bar">
+          <div class="app-brand">
+            <span class="app-mark" aria-hidden="true">V</span>
+            <span class="app-brand-name">Vision Studio</span>
+          </div>
+          <button class="app-account" id="appAccount" type="button" aria-label="打开个人与账号">
+            <span class="app-avatar" id="appAvatar" aria-hidden="true">·</span>
+            <span class="app-account-copy"><strong id="appAccountName">参赛成员</strong><small>个人与账号</small></span>
+          </button>
+        </header>
+
+        <div class="content" id="contentArea">
+          <!-- 上传 -->
+          <section class="app-view is-visible" data-view="workspace">
+            <section class="hero upload-hero" aria-labelledby="heroTitle">
+              <div>
+                <span class="eyebrow"><i></i> 图像分析与标注</span>
+                <h1 id="heroTitle">选择图片，确认导入。</h1>
+                <p>先加入待分析列表，确认后才会真正上传；可一次选择多张图片。</p>
+              </div>
+              <label class="upload-zone" for="imageUpload">
+                <span class="material-symbols-rounded" aria-hidden="true">cloud_upload</span>
+                <strong>点击选择图片</strong>
+                <small>可多选 · 支持 JPG、PNG、WEBP · 单次最多 50 张</small>
+              </label>
+              <p class="upload-feedback" id="uploadFeedback" aria-live="polite">还未选择文件</p>
+              <input id="imageUpload" type="file" accept="image/jpeg,image/png,image/webp,application/zip,.zip" multiple hidden />
+            </section>
+
+            <section class="section selection-panel" id="selectionPanel" hidden aria-labelledby="selectionTitle">
+              <div class="section-heading">
+                <div>
+                  <p class="section-kicker">READY TO ANALYZE</p>
+                  <h2 id="selectionTitle">已选择 0 个文件</h2>
+                </div>
+                <button class="text-button" id="clearSelection" type="button">全部清除</button>
+              </div>
+              <div class="selected-file-list" id="selectedFileList"></div>
+              <div class="analysis-targets">
+                <label for="analysisTargets">识别目标 <span>必填</span></label>
+                <input id="analysisTargets" type="text" maxlength="300" placeholder="例如：行人、汽车、交通标志" />
+                <small>用逗号分隔。模型会按这些类别检测并生成标注框。</small>
+              </div>
+              <div class="selection-actions"><span id="selectionSummary">确认后才会上传并开始分析</span><button class="primary-button" id="confirmAnalysis" type="button">确认并开始分析 <span>→</span></button></div>
+            </section>
+          </section>
+
+          <!-- 图像数据 -->
+          <section class="app-view" data-view="images" hidden>
+            <section class="view-hero">
+              <p class="section-kicker">IMAGE DATA</p>
+              <h1>图像数据</h1>
+              <p>已导入的图片与后续分析结果都在这里管理。</p>
+              <button class="secondary-button" id="backToUpload" type="button">继续上传</button>
+            </section>
+            <section class="section"><div class="empty-state" id="imageDataState"><strong>还没有图像数据</strong><p>回到上传页，选择图片后确认分析。</p></div></section>
+          </section>
+
+          <!-- 小组空间：独立整页，左上信息卡 / 左下聊天 / 右侧小组成果 -->
+          <section class="app-view team-view" data-view="team" hidden>
+            <header class="team-head">
+              <div>
+                <p class="section-kicker">TEAM SPACE</p>
+                <h1>小组空间</h1>
+              </div>
+              <div class="team-switch">
+                <label class="sr-only" for="teamSelect">我的小组</label>
+                <select id="teamSelect" aria-label="切换小组"><option value="">加载中…</option></select>
+                <button class="secondary-button" id="newTeamButton" type="button">新建小组</button>
+              </div>
+            </header>
+
+            <div class="team-grid" id="teamGrid" hidden>
+              <div class="team-col">
+                <article class="panel team-card-info">
+                  <div class="team-info-head">
+                    <span class="team-badge" id="teamBadge" aria-hidden="true">组</span>
+                    <div class="team-info-title">
+                      <h2 id="teamNameText">—</h2>
+                      <p id="teamMeta">—</p>
+                    </div>
+                    <button class="icon-button" id="editTeamButton" type="button" aria-label="编辑小组资料" title="编辑小组资料" hidden>
+                      <span class="material-symbols-rounded" aria-hidden="true">edit</span>
+                    </button>
+                  </div>
+                  <p class="team-desc" id="teamDesc"></p>
+                  <div class="team-members-block">
+                    <div class="block-head">
+                      <span>成员 <b id="teamMemberCount">0</b></span>
+                      <button class="text-button" id="manageMembers" type="button" hidden>管理</button>
+                    </div>
+                    <ul class="member-strip" id="memberStrip"></ul>
+                  </div>
+                </article>
+
+                <article class="panel team-card-chat" id="teamChatCard">
+                  <div class="panel-head">
+                    <div>
+                      <h3>小组聊天</h3>
+                      <p class="panel-sub" id="chatStatus">正在连接…</p>
+                    </div>
+                    <button class="icon-button" id="expandChat" type="button" aria-label="展开聊天" title="展开到全屏">
+                      <span class="material-symbols-rounded" aria-hidden="true">open_in_full</span>
+                    </button>
+                  </div>
+                  <div class="chat-body" id="chatBody">
+                    <p class="chat-empty">正在读取小组消息…</p>
+                  </div>
+                  <form class="chat-composer" id="chatForm">
+                    <input type="text" id="chatInput" maxlength="2000" autocomplete="off" placeholder="输入消息" disabled />
+                    <button type="submit" id="sendChat" disabled>发送</button>
+                  </form>
+                </article>
+              </div>
+
+              <article class="panel team-card-results">
+                <div class="panel-head">
+                  <div>
+                    <h3>小组成果</h3>
+                    <p class="panel-sub" id="teamResultsMeta">—</p>
+                  </div>
+                  <button class="secondary-button" id="uploadToTeam" type="button">上传图片</button>
+                  <input id="teamUploadInput" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden />
+                </div>
+                <div class="team-results" id="teamResults"></div>
+              </article>
+            </div>
+
+            <div class="team-empty" id="teamEmpty" hidden>
+              <span class="material-symbols-rounded" aria-hidden="true">groups</span>
+              <strong>还没有加入小组</strong>
+              <p>创建一个小组，把个人图片汇总成小组成果，也让成员看到彼此的进度。</p>
+              <button class="primary-button" id="createFirstTeam" type="button">创建小组</button>
+            </div>
+          </section>
+        </div>
+
+        <section class="detail-view" id="imageDetailView" hidden aria-labelledby="detailTitle">
+          <button class="back-button" id="backToImages" type="button">← 返回图像数据</button>
+          <div class="detail-layout">
+            <div class="detail-preview"><div class="detail-image-stack"><img id="detailImage" alt="已上传图片预览" /><svg id="annotationOverlay" aria-label="模型标注框"></svg></div></div>
+            <aside class="detail-meta">
+              <p class="section-kicker">IMAGE DETAIL</p>
+              <h1 id="detailTitle"></h1>
+              <dl>
+                <div><dt>图像尺寸</dt><dd id="detailDimensions">—</dd></div>
+                <div><dt>文件大小</dt><dd id="detailSize">—</dd></div>
+                <div><dt>分析状态</dt><dd id="detailAnalysis">等待提交分析</dd></div>
+              </dl>
+              <button class="secondary-button wide-button" id="sendToGroup" type="button">上传到小组库</button>
+              <button class="delete-button" id="deleteImageButton" type="button">删除图片</button>
+            </aside>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="upload-toast" id="uploadToast" role="status" aria-live="polite" hidden><span class="material-symbols-rounded" aria-hidden="true">check_circle</span><span><strong id="uploadToastTitle">已开始分析</strong><small id="uploadToastDetail">图片已存入图像数据</small></span><button id="goToData" type="button">查看图像数据</button></div>
+
+    <!-- 个人资料与账号 -->
+    <div class="dialog-backdrop" id="profileDialog" hidden>
+      <section class="dialog settings-dialog profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profileDialogTitle">
+        <button class="dialog-close" id="closeProfileDialog" type="button" aria-label="关闭">×</button>
+        <p class="section-kicker">PERSONAL ACCOUNT</p>
+        <h2 id="profileDialogTitle">个人资料与账号</h2>
+        <p class="dialog-description">可以修改展示名称与联系方式。用户名作为登录账号暂不更改。</p>
+
+        <div class="avatar-editor">
+          <span class="avatar avatar-64" id="profileAvatar" aria-hidden="true">·</span>
+          <div class="avatar-editor-copy">
+            <strong>头像</strong>
+            <p class="settings-help">JPG、PNG、WEBP，4 MB 以内。组员会在成员列表里看到它。</p>
+            <div class="avatar-editor-actions">
+              <button class="secondary-button" id="pickAvatar" type="button">更换头像</button>
+              <button class="text-button" id="removeAvatar" type="button" hidden>移除头像</button>
+            </div>
+          </div>
+          <input id="avatarInput" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+        </div>
+
+        <form id="profileForm" class="settings-form">
+          <label for="profileUsername">用户名</label><input id="profileUsername" type="text" readonly />
+          <label for="profileDisplayName">展示名称</label><input id="profileDisplayName" type="text" maxlength="50" placeholder="老师和组员看到的名称" />
+          <div class="settings-two-cols"><div><label for="profileEmail">邮箱</label><input id="profileEmail" type="email" maxlength="50" placeholder="可选" /></div><div><label for="profilePhone">手机号</label><input id="profilePhone" type="tel" maxlength="30" placeholder="可选" /></div></div>
+          <div class="settings-actions"><p id="profileStatus" class="settings-status" role="status"></p><button class="primary-button" type="submit">保存资料</button></div>
+        </form>
+
+        <form id="passwordForm" class="settings-form settings-divider">
+          <h3>账号安全</h3><p class="settings-help">修改密码后当前登录会失效，需要用新密码重新登录。</p>
+          <label for="oldPassword">当前密码</label><input id="oldPassword" type="password" autocomplete="current-password" required />
+          <label for="newPassword">新密码</label><input id="newPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required />
+          <label for="confirmPassword">确认新密码</label><input id="confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required />
+          <div class="settings-actions"><p id="passwordStatus" class="settings-status" role="status"></p><button class="secondary-button" type="submit">修改密码</button></div>
+        </form>
+      </section>
+    </div>
+
+    <!-- 新建 / 编辑小组：悬浮小窗 -->
+    <div class="dialog-backdrop" id="groupDialog" hidden>
+      <section class="dialog settings-dialog group-dialog" role="dialog" aria-modal="true" aria-labelledby="groupDialogTitle">
+        <button class="dialog-close" id="closeGroupDialog" type="button" aria-label="关闭">×</button>
+        <p class="section-kicker" id="groupDialogKicker">GROUP</p>
+        <h2 id="groupDialogTitle">新建小组</h2>
+        <p class="dialog-description" id="groupDialogDesc">给小组起个名字，之后可以随时修改。</p>
+        <form id="groupForm" class="settings-form">
+          <label for="groupName">小组名称</label><input id="groupName" type="text" maxlength="50" placeholder="例如：校园植物标注组" />
+          <label for="groupDescription">小组介绍</label><textarea id="groupDescription" maxlength="300" rows="3" placeholder="写下小组的任务或分工（可选）"></textarea>
+          <div class="settings-actions"><p id="groupStatus" class="settings-status" role="status"></p><button class="primary-button" id="saveGroupButton" type="submit">创建小组</button></div>
+        </form>
+        <div class="group-danger-zone" id="groupDanger" hidden>
+          <div><strong>解散小组</strong><p>仅组长可操作。解散后成员将无法再进入这个空间。</p></div>
+          <button class="delete-button compact-delete" id="dissolveTeamButton" type="button">解散小组</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- 成员与角色 -->
+    <div class="dialog-backdrop" id="membersDialog" hidden>
+      <section class="dialog settings-dialog" role="dialog" aria-modal="true" aria-labelledby="membersDialogTitle">
+        <button class="dialog-close" id="closeMembersDialog" type="button" aria-label="关闭">×</button>
+        <p class="section-kicker">MEMBERS</p>
+        <h2 id="membersDialogTitle">成员与角色</h2>
+        <p class="dialog-description">组长可以调整成员角色；管理员只能调整普通成员。</p>
+        <div id="memberRows" class="member-rows"></div>
+        <form id="addMemberForm" class="settings-form settings-divider" hidden>
+          <h3>添加成员</h3>
+          <label for="memberSearch">查找账号</label>
+          <div class="inline-form"><input id="memberSearch" type="search" minlength="2" placeholder="输入至少 2 位用户名" /><button id="searchMemberButton" class="secondary-button" type="button">查找</button></div>
+          <div id="memberResults" class="member-results"></div>
+          <p id="memberStatus" class="settings-status" role="status"></p>
+        </form>
+      </section>
+    </div>
+
+    <!-- 选择目标小组（个人图片 → 小组库） -->
+    <div class="dialog-backdrop" id="groupPickerDialog" hidden>
+      <section class="dialog settings-dialog group-dialog" role="dialog" aria-modal="true" aria-labelledby="groupPickerTitle">
+        <button class="dialog-close" id="closeGroupPicker" type="button" aria-label="关闭">×</button>
+        <p class="section-kicker">SEND TO GROUP</p>
+        <h2 id="groupPickerTitle">上传到小组库</h2>
+        <p class="dialog-description" id="groupPickerDesc">选一个小组，这张图片会复制一份到小组成果里。</p>
+        <div id="groupPickerList" class="picker-list"></div>
+        <p id="groupPickerStatus" class="settings-status" role="status"></p>
+      </section>
+    </div>
+
+    <!-- 统一危险操作确认：替代浏览器系统 confirm -->
+    <div class="dialog-backdrop danger-backdrop" id="dangerDialog" hidden>
+      <section class="dialog danger-dialog" role="alertdialog" aria-modal="true" aria-labelledby="dangerTitle" aria-describedby="dangerMessage">
+        <div class="danger-icon"><span class="material-symbols-rounded" aria-hidden="true">delete</span></div>
+        <p class="section-kicker" id="dangerKicker">DELETE</p>
+        <h2 id="dangerTitle">确认删除？</h2>
+        <p id="dangerMessage">删除后无法恢复。</p>
+        <p class="danger-detail" id="dangerDetail" hidden></p>
+        <div class="danger-actions">
+          <button type="button" id="cancelDanger">取消</button>
+          <button type="button" id="confirmDanger">确认删除</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="chat-scrim" id="chatScrim" hidden></div>
+
+    <script src="sdk.js"></script>
+    <script src="core.js"></script>
+    <script src="app.js"></script>
+    <script src="settings.js"></script>
+    <script src="team.js"></script>
+  </body>
+</html>

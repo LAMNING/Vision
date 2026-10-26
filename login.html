@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>登录 · Vision Studio</title>
+    <link rel="stylesheet" href="login.css" />
+  </head>
+  <body>
+    <main class="auth-shell">
+      <aside class="auth-showcase" aria-label="图像分析与标注演示">
+        <div class="showcase-copy">
+          <p class="eyebrow">VISION INTELLIGENCE</p>
+          <h2>每一张图片，<br />都有清晰的答案。</h2>
+          <p>上传、分析、标注。让图像数据变得可读、可用。</p>
+        </div>
+
+        <div class="analysis-scene" aria-hidden="true">
+          <div class="scene-grid"></div>
+          <div class="scene-thumbnail thumbnail-one">
+            <svg viewBox="0 0 160 112" fill="none"><rect width="160" height="112" fill="#E9EDF0"/><circle cx="119" cy="29" r="15" fill="#F4CD69"/><path d="M0 83C24 59 47 61 69 82C91 104 119 90 160 61V112H0V83Z" fill="#A5BDAE"/><path d="M0 96C34 70 63 74 89 96C113 116 134 102 160 89V112H0V96Z" fill="#719B83"/></svg>
+            <span>image&nbsp; 01</span>
+          </div>
+          <div class="sample-image">
+            <svg viewBox="0 0 360 270" fill="none">
+              <rect width="360" height="270" fill="#E9EDF0" />
+              <path d="M0 199C42 173 85 175 122 201C162 229 203 222 245 185C286 149 324 153 360 174V270H0V199Z" fill="#C7D4CD" />
+              <path d="M50 270C80 201 136 168 185 185C234 202 272 215 360 163V270H50Z" fill="#9DB9A9" />
+              <circle cx="221" cy="108" r="37" fill="#F5CE67" />
+              <path d="M136 223C139 154 156 107 198 87" stroke="#47765C" stroke-width="9" stroke-linecap="round" />
+              <path d="M153 159C116 132 91 126 75 131C105 160 131 169 153 159Z" fill="#5E9573" />
+              <path d="M165 132C190 104 215 96 232 103C209 129 185 141 165 132Z" fill="#5E9573" />
+              <path d="M150 192C184 166 213 164 234 177C201 196 173 202 150 192Z" fill="#5E9573" />
+            </svg>
+            <span class="scan-line"></span>
+            <span class="annotation-box box-one"></span>
+            <span class="annotation-box box-two"></span>
+            <span class="analysis-tag tag-one">leaf&nbsp; 98%</span>
+            <span class="analysis-tag tag-two">stem&nbsp; 94%</span>
+          </div>
+          <div class="scene-thumbnail thumbnail-two">
+            <svg viewBox="0 0 160 112" fill="none"><rect width="160" height="112" fill="#EDEEF2"/><rect x="32" y="21" width="95" height="70" rx="6" fill="#B4C9D8"/><path d="M50 78L69 57L81 70L96 48L116 78H50Z" fill="#7198B4"/><circle cx="105" cy="39" r="8" fill="#F6CD6A"/></svg>
+            <span>image&nbsp; 03</span>
+          </div>
+          <div class="metric-card metric-one"><span class="metric-dot"></span><strong>图像已识别</strong><small>12 个标注对象</small></div>
+          <div class="metric-card metric-two"><span class="metric-chart">⌁</span><strong>分析置信度</strong><small>96.4%</small></div>
+        </div>
+      </aside>
+      <section class="auth-card" aria-labelledby="authTitle">
+        <p class="eyebrow">IMAGE ANALYSIS &amp; ANNOTATION</p>
+        <h1 id="authTitle">登录后开始上传。</h1>
+        <p class="intro">使用你的账号进入图像分析与标注空间。</p>
+
+        <form id="authForm">
+          <label for="username">用户名</label>
+          <input id="username" name="username" autocomplete="username" minlength="3" maxlength="30" placeholder="3–30 位字母、数字或 . - _" required />
+
+          <label for="password">密码</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" minlength="8" maxlength="128" placeholder="至少 8 位" required />
+
+          <p id="authStatus" class="status" aria-live="polite"></p>
+          <button id="submitButton" type="submit">登录</button>
+        </form>
+
+        <button id="modeToggle" class="mode-toggle" type="button">没有账号？注册一个</button>
+      </section>
+    </main>
+    <div class="login-ripple" aria-hidden="true"></div>
+    <script src="sdk.js"></script>
+    <script src="core.js"></script>
+    <script src="auth.js"></script>
+  </body>
+</html>
