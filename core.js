@@ -90,7 +90,12 @@ window.VS = (() => {
 
   /** 把 SDKError / 网络错误统一变成可以直接给用户看的中文 Error。 */
   function translate(error) {
-    if (!isSdkError(error)) return error;
+    // 非 SDK 异常（TypeError、RangeError 之类）的 message 是英文的开发者信息，
+    // 直接显示会很突兀。界面统一给中文，原文留在控制台方便排查。
+    if (!isSdkError(error)) {
+      if (error && error.message) console.warn("[Vision Studio] 未预期的异常：", error);
+      return new Error("操作没有成功，请稍后重试");
+    }
     if (error.status === 401) return new Error("登录已失效，请重新登录");
     if (error.status === 502) return new Error("连不上后端，请确认服务已启动");
     if (error.status === 408) return new Error("请求超时，请稍后重试");
@@ -100,7 +105,10 @@ window.VS = (() => {
     const raw = Array.isArray(detail)
       ? detail.map((item) => item && item.msg).filter(Boolean).join("；")
       : typeof detail === "string" ? detail : "";
-    return new Error(friendly(raw) || raw || `操作失败（${error.status}）`);
+    const text = friendly(raw) || raw;
+    // 后端有些 detail 是英文原文，认不出来的不要直接摊给用户；
+    // 只要不是中文，就退回带状态码的通用文案。
+    return new Error(text && /[\u4e00-\u9fa5]/.test(text) ? text : `操作失败（${error.status}）`);
   }
 
   /** 所有业务调用都包一层：await call(() => sdk.xxx())。 */
