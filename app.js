@@ -50,6 +50,15 @@ const dangerMessage = document.querySelector("#dangerMessage");
 const dangerDetail = document.querySelector("#dangerDetail");
 const cancelDanger = document.querySelector("#cancelDanger");
 const confirmDangerButton = document.querySelector("#confirmDanger");
+const targetPlanTitle = document.querySelector("#targetPlanTitle");
+const targetPlanDetail = document.querySelector("#targetPlanDetail");
+const openTargetSettings = document.querySelector("#openTargetSettings");
+const targetSettingsDialog = document.querySelector("#targetSettingsDialog");
+const closeTargetSettings = document.querySelector("#closeTargetSettings");
+const targetSettingsForm = document.querySelector("#targetSettingsForm");
+const projectTargets = document.querySelector("#projectTargets");
+const projectTargetsStatus = document.querySelector("#projectTargetsStatus");
+const saveProjectTargets = document.querySelector("#saveProjectTargets");
 
 const utilityRail = document.querySelector(".utility-rail");
 const logoutChip = document.querySelector("#railLogout");
@@ -74,6 +83,7 @@ let imagesLoaded = false;
 let analysisPollTimer = 0;
 let deleteConfirmTimer = 0;
 let deleteArmed = false;
+let analysisTargetsDirty = false;
 const analysisByImage = new Map();
 
 /* ---------------- 启动 ---------------- */
@@ -84,7 +94,7 @@ if (sessionStorage.getItem("vision_enter_transition") === "1") {
   document.body.classList.add("is-arriving");
 }
 requestAnimationFrame(() => document.body.classList.add("motion-ready"));
-analysisTargets.value = localStorage.getItem("vision_analysis_targets") || "";
+loadProjectTargets();
 
 /* ---------------- 顶栏账号 ---------------- */
 
@@ -276,6 +286,11 @@ function toggleDialog(dialog) {
 
 railProfile.addEventListener("click", () => toggleDialog(profileDialog));
 closeProfileDialog.addEventListener("click", () => closeDialog(profileDialog));
+openTargetSettings.addEventListener("click", () => {
+  openDialog(targetSettingsDialog);
+  loadProjectTargets({ forEditor: true });
+});
+closeTargetSettings.addEventListener("click", () => closeDialog(targetSettingsDialog));
 allDialogs.forEach((dialog) => dialog.addEventListener("click", (event) => {
   if (event.target === dialog) closeDialog(dialog);
 }));
@@ -635,8 +650,53 @@ function scheduleTaskPoll(projectId, taskId, failures = 0) {
   }, 2500);
 }
 
+function parseTargets(value) {
+  return [...new Set(value.split(/[，,、;；\n]+/).map((item) => item.trim()).filter(Boolean))].slice(0, 20);
+}
+
 function selectedTargets() {
-  return [...new Set(analysisTargets.value.split(/[，,、;；\n]+/).map((item) => item.trim()).filter(Boolean))].slice(0, 20);
+  return parseTargets(analysisTargets.value);
+}
+
+function renderProjectTargets(targets, { unavailable = false } = {}) {
+  if (unavailable) {
+    targetPlanTitle.textContent = "暂时无法读取识别方案";
+    targetPlanDetail.textContent = "仍可在选择图片后手动填写，不影响上传。";
+    return;
+  }
+  targetPlanTitle.textContent = targets.length ? targets.join("、") : "尚未设置识别目标";
+  targetPlanDetail.textContent = targets.length
+    ? `已保存 ${targets.length} 项，后续上传会自动带出。`
+    : "设置一次，后续上传会自动复用。";
+}
+
+async function loadProjectTargets({ forEditor = false } = {}) {
+  if (forEditor) {
+    projectTargetsStatus.classList.remove("is-error");
+    projectTargetsStatus.textContent = "正在读取项目设置…";
+    saveProjectTargets.disabled = true;
+  }
+  try {
+    const project = await ensureImageProject();
+    const categories = await call(() => sdk.listCategories(project.id, { includeDisabled: true }));
+    const targets = categories.filter((item) => item.enabled).map((item) => item.zh_name).filter(Boolean);
+    renderProjectTargets(targets);
+    if (!analysisTargetsDirty) analysisTargets.value = targets.join("、");
+    if (forEditor) {
+      projectTargets.value = targets.join("、");
+      projectTargetsStatus.textContent = targets.length ? `已读取 ${targets.length} 项识别目标` : "还没有保存识别目标";
+    }
+    return targets;
+  } catch (error) {
+    renderProjectTargets([], { unavailable: true });
+    if (forEditor) {
+      projectTargetsStatus.classList.add("is-error");
+      projectTargetsStatus.textContent = error.message === "Failed to fetch" ? "暂时无法连接后端" : error.message;
+    }
+    return [];
+  } finally {
+    if (forEditor) saveProjectTargets.disabled = false;
+  }
 }
 
 // 用户填的识别目标要变成项目类目：新词建类目，旧词按需启停，
@@ -673,6 +733,38 @@ async function submitAnalysisTask(project, images, targets) {
   if (ACTIVE_TASK_STATES.has(submitted.status)) scheduleTaskPoll(project.id, task.id);
   return submitted;
 }
+
+analysisTargets.addEventListener("input", () => { analysisTargetsDirty = true; });
+
+targetSettingsForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const targets = parseTargets(projectTargets.value);
+  projectTargetsStatus.classList.remove("is-error");
+  if (!targets.length) {
+    projectTargetsStatus.classList.add("is-error");
+    projectTargetsStatus.textContent = "请至少填写一个识别目标";
+    projectTargets.focus();
+    return;
+  }
+  saveProjectTargets.disabled = true;
+  saveProjectTargets.textContent = "正在保存…";
+  projectTargetsStatus.textContent = "正在同步到项目…";
+  try {
+    const project = await ensureImageProject();
+    await syncAnalysisConfig(project.id, targets);
+    projectTargets.value = targets.join("、");
+    analysisTargets.value = targets.join("、");
+    analysisTargetsDirty = false;
+    renderProjectTargets(targets);
+    projectTargetsStatus.textContent = `已保存 ${targets.length} 项，下一次上传会自动使用`;
+  } catch (error) {
+    projectTargetsStatus.classList.add("is-error");
+    projectTargetsStatus.textContent = error.message === "Failed to fetch" ? "暂时无法连接后端，请稍后重试" : error.message;
+  } finally {
+    saveProjectTargets.disabled = false;
+    saveProjectTargets.textContent = "保存识别方案";
+  }
+});
 
 /* ---------------- 图片详情 ---------------- */
 
@@ -865,7 +957,8 @@ confirmAnalysis.addEventListener("click", async () => {
     confirmAnalysis.textContent = "正在提交模型分析…";
     uploadFeedback.textContent = "图片已导入，正在创建自动分析任务…";
     await submitAnalysisTask(project, importedImages, targets);
-    localStorage.setItem("vision_analysis_targets", targets.join("、"));
+    renderProjectTargets(targets);
+    analysisTargetsDirty = false;
     selectedFiles = [];
     renderSelection();
     uploadFeedback.textContent = `已导入 ${importedCount} 张图片，模型分析任务已提交`;

@@ -273,6 +273,10 @@ html[data-theme="clear-sky"] .upload-zone .material-symbols-rounded { display: g
 html[data-theme="clear-sky"] .upload-zone strong { font-size: 15px; }
 html[data-theme="clear-sky"] .upload-zone small { color: var(--sky-muted); font-size: 11px; }
 html[data-theme="clear-sky"] .upload-feedback { text-align: center; }
+html[data-theme="clear-sky"] .target-plan-card { border-color: var(--sky-outline-soft); border-radius: 18px; background: #fff; box-shadow: 0 1px 2px rgba(60, 64, 67, .08); }
+html[data-theme="clear-sky"] .target-plan-card > .material-symbols-rounded { color: var(--sky-primary); background: var(--sky-primary-container); }
+html[data-theme="clear-sky"] .target-plan-card strong { color: var(--sky-text); }
+html[data-theme="clear-sky"] .target-plan-card p { color: var(--sky-muted); }
 
 html[data-theme="clear-sky"] .selection-panel,
 html[data-theme="clear-sky"] .panel,

@@ -86,6 +86,15 @@
               </label>
               <p class="upload-feedback" id="uploadFeedback" aria-live="polite">还未选择文件</p>
               <input id="imageUpload" type="file" accept="image/jpeg,image/png,image/webp,application/zip,.zip" multiple hidden />
+              <section class="target-plan-card" aria-labelledby="targetPlanTitle">
+                <span class="material-symbols-rounded" aria-hidden="true">target</span>
+                <div>
+                  <small>识别方案 · 图像数据</small>
+                  <strong id="targetPlanTitle">正在读取识别目标…</strong>
+                  <p id="targetPlanDetail">保存后，后续上传会自动复用。</p>
+                </div>
+                <button class="secondary-button" id="openTargetSettings" type="button">设置识别目标</button>
+              </section>
             </section>
 
             <section class="section selection-panel" id="selectionPanel" hidden aria-labelledby="selectionTitle">
@@ -217,6 +226,22 @@
     </div>
 
     <div class="upload-toast" id="uploadToast" role="status" aria-live="polite" hidden><span class="material-symbols-rounded" aria-hidden="true">check_circle</span><span><strong id="uploadToastTitle">已开始分析</strong><small id="uploadToastDetail">图片已存入图像数据</small></span><button id="goToData" type="button">查看图像数据</button></div>
+
+    <!-- 识别方案：保存到默认的“图像数据”项目，上传时自动复用 -->
+    <div class="dialog-backdrop" id="targetSettingsDialog" hidden>
+      <section class="dialog settings-dialog target-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="targetSettingsTitle">
+        <button class="dialog-close" id="closeTargetSettings" type="button" aria-label="关闭">×</button>
+        <p class="section-kicker">RECOGNITION TARGETS</p>
+        <h2 id="targetSettingsTitle">设置识别目标</h2>
+        <p class="dialog-description">这套目标保存在“图像数据”项目中。以后上传图片时会自动带出，也可以临时修改后再分析。</p>
+        <form id="targetSettingsForm" class="settings-form">
+          <label for="projectTargets">需要识别什么</label>
+          <textarea id="projectTargets" maxlength="300" rows="4" placeholder="例如：行人、汽车、交通标志"></textarea>
+          <p class="settings-help">用逗号、顿号或换行分隔，最多 20 项。</p>
+          <div class="settings-actions"><p id="projectTargetsStatus" class="settings-status" role="status"></p><button class="primary-button" id="saveProjectTargets" type="submit">保存识别方案</button></div>
+        </form>
+      </section>
+    </div>
 
     <!-- 个人资料与账号 -->
     <div class="dialog-backdrop" id="profileDialog" hidden>
