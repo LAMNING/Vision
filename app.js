@@ -598,8 +598,12 @@ async function loadAnalysisState(project) {
     const tasks = await call(() => sdk.listProjectTasks(project.id)).catch(() => []);
     // 后端按「新 → 旧」返回，但顺序不是接口契约：这里按 id 取最大，
     // 否则会挑到最早那次任务，没被它覆盖的图片就显示成「等待提交分析」。
+    // 优先级：正在跑的 > 有结果的（非已取消）> 兜底取最新。
+    // 若不跳过 cancelled，取消一个较新的任务后，它没覆盖的图片会被误标成「等待提交分析」。
     const newest = (list) => list.reduce((best, item) => (!best || item.id > best.id ? item : best), null);
-    const pick = newest(tasks.filter((item) => ACTIVE_TASK_STATES.has(item.status))) || newest(tasks);
+    const pick = newest(tasks.filter((item) => ACTIVE_TASK_STATES.has(item.status)))
+      || newest(tasks.filter((item) => item.status !== "cancelled"))
+      || newest(tasks);
     if (pick) {
       task = await call(() => sdk.getTask(project.id, pick.id)).catch(() => null);
       if (task) localStorage.setItem(`vision_recent_task_${project.id}`, String(task.id));
