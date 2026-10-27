@@ -7,6 +7,12 @@
 .theme-quick-button { display: none; }
 #railCollapse { display: none; }
 
+
+/* 首帧禁过渡：刷新时直接用最终状态，避免侧栏宽度"滑一下" */
+html.is-booting .main,
+html.is-booting .utility-rail,
+html.is-booting .utility-rail * { transition: none !important; }
+
 /* ---------- 主题管理：两套主题共用 ---------- */
 .theme-settings { margin: 24px 0; border: 1px solid #e5e5ea; border-radius: 16px; background: #fafafa; padding: 14px; }
 .theme-settings-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
@@ -72,7 +78,7 @@ html[data-theme="clear-sky"] .main {
   margin-left: var(--sky-nav-width);
   transition: margin-left 220ms cubic-bezier(.2, 0, 0, 1);
 }
-html[data-theme="clear-sky"] body.is-nav-collapsed .main { margin-left: var(--sky-nav-compact); }
+html[data-theme="clear-sky"].is-nav-collapsed .main { margin-left: var(--sky-nav-compact); }
 html[data-theme="clear-sky"] .app-bar {
   width: 100%;
   min-height: 64px;
@@ -119,9 +125,9 @@ html[data-theme="clear-sky"] .utility-rail {
   backdrop-filter: none;
   transition: width 220ms cubic-bezier(.2, 0, 0, 1), padding 220ms cubic-bezier(.2, 0, 0, 1);
 }
-html[data-theme="clear-sky"] body.is-nav-collapsed .utility-rail { width: var(--sky-nav-compact); padding-inline: 10px; }
+html[data-theme="clear-sky"].is-nav-collapsed .utility-rail { width: var(--sky-nav-compact); padding-inline: 10px; }
 html[data-theme="clear-sky"] .utility-rail.is-expanded { width: var(--sky-nav-width); }
-html[data-theme="clear-sky"] body.is-nav-collapsed .utility-rail.is-expanded { width: var(--sky-nav-compact); }
+html[data-theme="clear-sky"].is-nav-collapsed .utility-rail.is-expanded { width: var(--sky-nav-compact); }
 html[data-theme="clear-sky"] .utility-rail button:not(.logout-chip) {
   width: 100%;
   height: 48px;
@@ -142,9 +148,13 @@ html[data-theme="clear-sky"] .utility-rail .rail-label {
   margin-left: 16px;
   color: inherit;
   font-size: 13px;
-  font-weight: 560;
+  font-weight: 500;
+  letter-spacing: .01em;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
   opacity: 1;
-  transition: opacity 120ms ease;
+  transition: max-width 200ms cubic-bezier(.2, 0, 0, 1), margin-left 200ms cubic-bezier(.2, 0, 0, 1), opacity 140ms ease;
 }
 html[data-theme="clear-sky"] .rail-label-current { display: none; }
 html[data-theme="clear-sky"] .rail-label-clear { display: inline; }
@@ -182,22 +192,58 @@ html[data-theme="clear-sky"] .utility-rail.is-expanded .logout-chip {
 html[data-theme="clear-sky"] .utility-rail .logout-chip:not(.is-open):hover { color: var(--sky-danger); }
 html[data-theme="clear-sky"] .utility-rail .logout-chip:not(.is-open):hover::after { background: #f9dedc; }
 html[data-theme="clear-sky"] .logout-chip-icon { width: 32px; height: 40px; }
+
+/* 收起态点退出：确认卡需要空间，否则"确定"被压成 0 宽点不到。
+   用 :has() 让侧栏与内容区在确认期间同步让位，动画沿用原有过渡。 */
+html[data-theme="clear-sky"].is-nav-collapsed .utility-rail:has(.logout-chip.is-open) { width: var(--sky-nav-width); }
+html[data-theme="clear-sky"].is-nav-collapsed .utility-rail:has(.logout-chip.is-open) .logout-slot { width: 100%; }
+html[data-theme="clear-sky"].is-nav-collapsed .utility-rail:has(.logout-chip.is-open) .logout-chip { width: 100%; }
+html[data-theme="clear-sky"].is-nav-collapsed body:has(.logout-chip.is-open) .main { margin-left: var(--sky-nav-width); }
+html[data-theme="clear-sky"] .utility-rail .logout-chip.is-open .logout-chip-copy,
+html[data-theme="clear-sky"] .utility-rail .logout-chip.is-confirming .logout-chip-copy { opacity: 1; }
+html[data-theme="clear-sky"] .utility-rail .logout-chip.is-confirming .logout-chip-action { max-width: 72px; opacity: 1; transform: none; margin-right: 8px; }
+
 html[data-theme="clear-sky"] .logout-chip-copy { opacity: 1; }
 html[data-theme="clear-sky"] .logout-chip-title { color: inherit; font-size: 12px; }
 html[data-theme="clear-sky"] .logout-chip-note { color: #7b8188; }
 html[data-theme="clear-sky"] .utility-rail .logout-chip.is-open { width: 100%; transform: none; }
 html[data-theme="clear-sky"] .utility-rail .logout-chip.is-confirming { width: 100%; }
+
+/* 登录后飞入：澄白的 rail-arrive 用 translate(0,-50%)（居中轨专用），
+   晴蓝是全高侧栏，沿用会被顶到视口上方 400px 再瞬跳回来，所以单独给一套。 */
+html[data-theme="clear-sky"] body.is-arriving .utility-rail {
+  animation: sky-rail-arrive 460ms 80ms cubic-bezier(.2, 0, 0, 1) backwards;
+}
+@keyframes sky-rail-arrive {
+  from { opacity: 0; transform: translateX(-14px); }
+  to { opacity: 1; transform: none; }
+}
+html[data-theme="clear-sky"] body.is-arriving .main {
+  animation: sky-main-arrive 520ms cubic-bezier(.2, 0, 0, 1) backwards;
+}
+@keyframes sky-main-arrive {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
 html[data-theme="clear-sky"] #railCollapse { display: flex; margin-top: 4px; }
 
-html[data-theme="clear-sky"] body.is-nav-collapsed .utility-rail button:not(.logout-chip) { justify-content: center; padding-inline: 0; }
-html[data-theme="clear-sky"] body.is-nav-collapsed .utility-rail .rail-label,
-html[data-theme="clear-sky"] body.is-nav-collapsed .rail-profile-copy,
-html[data-theme="clear-sky"] body.is-nav-collapsed .rail-profile-arrow,
-html[data-theme="clear-sky"] body.is-nav-collapsed .logout-chip-copy { display: none; opacity: 0; }
-html[data-theme="clear-sky"] body.is-nav-collapsed #railProfile { justify-content: center; padding: 8px 0; }
-html[data-theme="clear-sky"] body.is-nav-collapsed .rail-profile-meta { flex: 0 0 auto; }
-html[data-theme="clear-sky"] body.is-nav-collapsed .logout-slot { width: 48px; }
-html[data-theme="clear-sky"] body.is-nav-collapsed .utility-rail .logout-chip { width: 48px; padding: 0 7px; }
+/* 收起时保持 padding 16px：76 - 20 - 16×2 = 24，正好等于图标宽度，图标自然居中 */
+html[data-theme="clear-sky"].is-nav-collapsed .utility-rail .rail-label,
+html[data-theme="clear-sky"].is-nav-collapsed .rail-profile-copy,
+html[data-theme="clear-sky"].is-nav-collapsed .rail-profile-arrow,
+html[data-theme="clear-sky"].is-nav-collapsed .logout-chip-copy {
+  max-width: 0;
+  margin-left: 0;
+  overflow: hidden;
+  opacity: 0;
+}
+html[data-theme="clear-sky"].is-nav-collapsed .rail-profile-copy { max-width: 0; overflow: hidden; }
+html[data-theme="clear-sky"].is-nav-collapsed .rail-profile-meta { gap: 0; }
+html[data-theme="clear-sky"].is-nav-collapsed #railProfile { justify-content: center; padding: 8px 0; }
+html[data-theme="clear-sky"].is-nav-collapsed .rail-profile-meta { flex: 0 0 auto; }
+html[data-theme="clear-sky"].is-nav-collapsed .logout-slot { width: 48px; margin-inline: auto; }
+html[data-theme="clear-sky"].is-nav-collapsed .utility-rail .logout-chip { width: 48px; padding: 0 7px; }
 
 /* 内容层级 */
 html[data-theme="clear-sky"] .content,
@@ -311,9 +357,9 @@ html[data-theme="clear-sky"] .analysis-tag { background: var(--sky-primary); }
 
 @media (max-width: 820px) {
   html[data-theme="clear-sky"] .main,
-  html[data-theme="clear-sky"] body.is-nav-collapsed .main { margin-left: 0; }
+  html[data-theme="clear-sky"].is-nav-collapsed .main { margin-left: 0; }
   html[data-theme="clear-sky"] .utility-rail,
-  html[data-theme="clear-sky"] body.is-nav-collapsed .utility-rail {
+  html[data-theme="clear-sky"].is-nav-collapsed .utility-rail {
     inset: auto 12px 12px;
     display: grid;
     width: auto;
@@ -328,12 +374,12 @@ html[data-theme="clear-sky"] .analysis-tag { background: var(--sky-primary); }
     backdrop-filter: blur(12px);
   }
   html[data-theme="clear-sky"] .utility-rail.is-expanded,
-  html[data-theme="clear-sky"] body.is-nav-collapsed .utility-rail.is-expanded { width: auto; }
+  html[data-theme="clear-sky"].is-nav-collapsed .utility-rail.is-expanded { width: auto; }
   html[data-theme="clear-sky"] #railProfile { order: 4; height: 52px; margin: 0; background: transparent; }
   html[data-theme="clear-sky"] #railProfile .rail-legacy-icon { display: inline; }
   html[data-theme="clear-sky"] #railProfile .rail-profile-meta { display: none; }
   html[data-theme="clear-sky"] .utility-rail button:not(.logout-chip),
-  html[data-theme="clear-sky"] body.is-nav-collapsed .utility-rail button:not(.logout-chip) { width: 100%; height: 52px; justify-content: center; border-radius: 16px; padding: 0; }
+  html[data-theme="clear-sky"].is-nav-collapsed .utility-rail button:not(.logout-chip) { width: 100%; height: 52px; justify-content: center; border-radius: 16px; padding: 0; }
   html[data-theme="clear-sky"] .utility-rail .rail-label,
   html[data-theme="clear-sky"] .rail-divider,
   html[data-theme="clear-sky"] .logout-slot,
@@ -357,3 +403,96 @@ html[data-theme="clear-sky"] .analysis-tag { background: var(--sky-primary); }
   html[data-theme="clear-sky"] .main,
   html[data-theme="clear-sky"] .utility-rail { transition: none !important; }
 }
+
+/* ==========================================================================
+   晴蓝 · 视觉打磨（第三十二轮修复）
+   --------------------------------------------------------------------------
+   这一段的规则都限定在 clear-sky 下，澄白完全不受影响。
+   ========================================================================== */
+
+/* 1. 上传区：参考图是纯色表面，去掉渐变和内阴影，悬停只提亮边框 */
+html[data-theme="clear-sky"] .upload-zone {
+  border: 1px dashed #c8ccd4;
+  border-radius: 18px;
+  background: #f8fafd;
+  box-shadow: none;
+  min-height: 232px;
+  margin-top: 22px;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+html[data-theme="clear-sky"] .upload-zone:hover,
+html[data-theme="clear-sky"] .upload-zone:focus-within {
+  border-color: var(--sky-primary);
+  background: #f1f6fe;
+  transform: none;
+}
+html[data-theme="clear-sky"] .upload-zone .material-symbols-rounded {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  font-size: 27px;
+}
+html[data-theme="clear-sky"] .upload-zone strong { font-size: 15px; font-weight: 600; }
+html[data-theme="clear-sky"] .upload-zone small { margin-top: 7px; display: block; font-size: 11.5px; }
+
+/* 2. 选文件提示：原来贴在卡片外面像孤零零一行字，收进一个浅色条 */
+html[data-theme="clear-sky"] .upload-feedback {
+  margin: 14px 0 0;
+  border-radius: 10px;
+  background: var(--sky-surface-low);
+  padding: 10px 12px;
+  color: var(--sky-muted);
+  font-size: 12px;
+  text-align: center;
+}
+html[data-theme="clear-sky"] .upload-feedback:empty { display: none; }
+
+/* 3. 弹窗：内容比视口高时能滚动，不再被底部裁掉 */
+html[data-theme="clear-sky"] .dialog {
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 26px;
+}
+html[data-theme="clear-sky"] .dialog h2 { font-size: 21px; letter-spacing: -.02em; }
+html[data-theme="clear-sky"] .dialog-description { font-size: 12px; line-height: 1.65; }
+
+/* 4. 小组成果：卡片不再强撑 452px 高，格子放大，内容贴顶 */
+html[data-theme="clear-sky"] .team-card-results { min-height: 0; align-self: start; }
+html[data-theme="clear-sky"] .team-results {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  align-content: start;
+  gap: 12px;
+}
+html[data-theme="clear-sky"] .team-results.is-empty { min-height: 190px; }
+html[data-theme="clear-sky"] .result-tile { border-radius: 14px; }
+html[data-theme="clear-sky"] .result-name { font-size: 11px; }
+
+/* 5. 标注标签：图片底色多变，加深描边保证可读 */
+html[data-theme="clear-sky"] #annotationOverlay text {
+  stroke: rgba(4, 30, 73, .96);
+  stroke-width: 6px;
+  font-size: 13px;
+}
+html[data-theme="clear-sky"] #annotationOverlay rect { stroke-width: 2; }
+
+/* 6. 主题预览块：澄白那格原来是纯黑一段，像渲染坏了，压成浅灰 */
+html[data-theme="clear-sky"] .theme-preview-pure i:first-child { background: #d7d7dc; }
+
+/* 7. 键盘焦点可见（只在键盘操作时出现，不影响鼠标点击） */
+html[data-theme="clear-sky"] :focus-visible { outline: 2px solid var(--sky-primary); outline-offset: 2px; }
+html[data-theme="clear-sky"] .utility-rail button:focus-visible { outline-offset: -2px; }
+
+/* 8. 详情大图跟随卡片圆角 */
+html[data-theme="clear-sky"] .detail-image-stack { border-radius: 14px; overflow: hidden; background: #f1f4f9; }
+
+/* 9. 侧栏底部：退出与收起之间用一条细线分开，收起按钮更轻 */
+html[data-theme="clear-sky"] #railCollapse { color: #7b8188; }
+html[data-theme="clear-sky"] #railCollapse:hover { color: var(--sky-text); background: var(--sky-surface-high); }
+html[data-theme="clear-sky"] .logout-slot { border-top: 1px solid var(--sky-outline-soft); padding-top: 6px; }
+html[data-theme="clear-sky"] .logout-chip-note { color: #7b8188; font-size: 9.5px; }
+
+/* 10. 稳定滚动条占位：刷新后图片加载出来、页面从"不滚动"变成"滚动"时，
+       内容列宽度会突然少 15px，文字随之重排（看起来像"文字突然变一行"）。
+       预留滚动槽可以彻底消除这类重排。 */
+html[data-theme="clear-sky"] { scrollbar-gutter: stable; }

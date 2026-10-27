@@ -39,11 +39,26 @@
   // 放在 head 中同步执行，避免页面先闪一下旧主题。
   setTheme(readTheme(), false);
 
-  function readNavCollapsed() {
+  // 收起状态也在这里先落到 <html> 上：head 阶段 body 还不存在，
+  // 若等 DOMContentLoaded 再落，刷新时就会先画出展开态再收回，看起来是"闪一下"。
+  function readNavCollapsedEarly() {
     try { return localStorage.getItem(NAV_KEY) === "1"; } catch { return false; }
+  }
+  document.documentElement.classList.toggle("is-nav-collapsed", readNavCollapsedEarly());
+  // 首帧禁用过渡：配合 themes.css 的 .is-booting，避免侧栏宽度从 232 滑到 76。
+  document.documentElement.classList.add("is-booting");
+  const clearBoot = () => requestAnimationFrame(() => requestAnimationFrame(() => {
+    document.documentElement.classList.remove("is-booting");
+  }));
+  if (document.readyState === "complete") clearBoot();
+  else window.addEventListener("load", clearBoot, { once: true });
+
+  function readNavCollapsed() {
+    return readNavCollapsedEarly();
   }
 
   function setNavCollapsed(collapsed) {
+    document.documentElement.classList.toggle("is-nav-collapsed", collapsed);
     document.body.classList.toggle("is-nav-collapsed", collapsed);
     const button = document.querySelector("#railCollapse");
     if (button) {
@@ -75,7 +90,7 @@
     const collapse = document.querySelector("#railCollapse");
     if (collapse) {
       setNavCollapsed(readNavCollapsed());
-      collapse.addEventListener("click", () => setNavCollapsed(!document.body.classList.contains("is-nav-collapsed")));
+      collapse.addEventListener("click", () => setNavCollapsed(!document.documentElement.classList.contains("is-nav-collapsed")));
     }
 
     const quick = document.querySelector("#themeQuickButton");
