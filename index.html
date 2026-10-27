@@ -5,18 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Vision Studio AI 视觉工作台" />
     <title>Vision Studio</title>
+    <script src="theme.js"></script>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="themes.css" />
   </head>
   <body>
     <div class="app-shell">
       <aside class="utility-rail" aria-label="快捷操作">
         <button id="railProfile" type="button" aria-label="个人与账号">
-          <span class="material-symbols-rounded" aria-hidden="true">account_circle</span>
-          <span class="rail-label">个人与账号</span>
+          <span class="material-symbols-rounded rail-legacy-icon" aria-hidden="true">account_circle</span>
+          <span class="rail-label rail-label-current">个人与账号</span>
+          <span class="rail-profile-meta" aria-hidden="true">
+            <span class="rail-profile-avatar" id="railProfileAvatar">·</span>
+            <span class="rail-profile-copy"><strong id="railProfileName">参赛成员</strong><small>个人与账号</small></span>
+            <span class="material-symbols-rounded rail-profile-arrow">chevron_right</span>
+          </span>
         </button>
         <button id="railUpload" type="button" aria-label="上传图片">
           <span class="material-symbols-rounded" aria-hidden="true">cloud_upload</span>
-          <span class="rail-label">上传图片</span>
+          <span class="rail-label rail-label-current">上传图片</span>
+          <span class="rail-label rail-label-clear">工作台</span>
         </button>
         <button id="railData" type="button" aria-label="查看图像数据">
           <span class="material-symbols-rounded" aria-hidden="true">photo_prints</span>
@@ -41,6 +49,10 @@
             <span class="logout-chip-action" id="confirmLogout" role="button" tabindex="0">确定</span>
           </button>
         </span>
+        <button id="railCollapse" class="rail-collapse" type="button" aria-label="收起侧边栏" aria-expanded="true">
+          <span class="material-symbols-rounded" aria-hidden="true">left_panel_close</span>
+          <span class="rail-label">收起侧边栏</span>
+        </button>
       </aside>
 
       <main class="main" id="workspace">
@@ -52,6 +64,9 @@
           <button class="app-account" id="appAccount" type="button" aria-label="打开个人与账号">
             <span class="app-avatar" id="appAvatar" aria-hidden="true">·</span>
             <span class="app-account-copy"><strong id="appAccountName">参赛成员</strong><small>个人与账号</small></span>
+          </button>
+          <button class="theme-quick-button" id="themeQuickButton" type="button" aria-label="打开外观与主题">
+            <span class="material-symbols-rounded" aria-hidden="true">palette</span>
           </button>
         </header>
 
@@ -210,6 +225,25 @@
         <p class="section-kicker">PERSONAL ACCOUNT</p>
         <h2 id="profileDialogTitle">个人资料与账号</h2>
         <p class="dialog-description">可以修改展示名称与联系方式。用户名作为登录账号暂不更改。</p>
+
+        <section class="theme-settings" aria-labelledby="themeSettingsTitle">
+          <div class="theme-settings-head">
+            <div><h3 id="themeSettingsTitle">外观与主题</h3><p>主题只改变界面外观，不会影响图片和分析数据。</p></div>
+            <span class="material-symbols-rounded" aria-hidden="true">palette</span>
+          </div>
+          <div class="theme-options" role="radiogroup" aria-label="界面主题">
+            <button class="theme-option" type="button" role="radio" aria-checked="false" data-theme-choice="clear-sky">
+              <span class="theme-preview theme-preview-clear"><i></i><i></i><i></i></span>
+              <span><strong>晴蓝</strong><small>Google / Material 3 · 默认</small></span>
+              <span class="material-symbols-rounded theme-check" aria-hidden="true">check_circle</span>
+            </button>
+            <button class="theme-option" type="button" role="radio" aria-checked="false" data-theme-choice="pure-white">
+              <span class="theme-preview theme-preview-pure"><i></i><i></i><i></i></span>
+              <span><strong>澄白</strong><small>保留当前极简界面</small></span>
+              <span class="material-symbols-rounded theme-check" aria-hidden="true">check_circle</span>
+            </button>
+          </div>
+        </section>
 
         <div class="avatar-editor">
           <span class="avatar avatar-64" id="profileAvatar" aria-hidden="true">·</span>
