@@ -76,6 +76,11 @@ const selectAllImages = document.querySelector("#selectAllImages");
 const selectionCount = document.querySelector("#selectionCount");
 const downloadSelected = document.querySelector("#downloadSelected");
 const downloadAnnotated = document.querySelector("#downloadAnnotated");
+const classicRecentState = document.querySelector("#classicRecentState");
+const classicViewAll = document.querySelector("#classicViewAll");
+const classicAnalyzingCount = document.querySelector("#classicAnalyzingCount");
+const classicCompletedCount = document.querySelector("#classicCompletedCount");
+const classicWaitingCount = document.querySelector("#classicWaitingCount");
 
 const allDialogs = [...document.querySelectorAll(".dialog-backdrop")];
 
@@ -95,6 +100,10 @@ let deleteConfirmTimer = 0;
 let deleteArmed = false;
 let analysisTargetsDirty = false;
 const analysisByImage = new Map();
+
+function themeDelay(regular, classic) {
+  return window.VSTheme?.get() === "classic" ? classic : regular;
+}
 
 /* ---------------- 启动 ---------------- */
 
@@ -238,6 +247,7 @@ railEnterprise.addEventListener("click", () => {
   showView("enterprise");
 });
 backToUpload.addEventListener("click", () => showView("workspace"));
+classicViewAll.addEventListener("click", () => showView("images"));
 
 /* ---------------- 弹窗 ---------------- */
 
@@ -263,7 +273,7 @@ function closeDialog(dialog) {
   dialogTimers.set(dialog, window.setTimeout(() => {
     dialog.hidden = true;
     syncRail();
-  }, 180));
+  }, themeDelay(180, 110)));
   syncRail();
 }
 
@@ -381,7 +391,7 @@ function openLogoutChip() {
       chipTimers.push(setTimeout(() => {
         if (chipState !== "open") return;
         logoutChip.classList.add("is-confirming");
-      }, 360));
+      }, themeDelay(360, 120)));
     });
   });
 }
@@ -399,14 +409,14 @@ function closeLogoutChip() {
     if (chipState !== "closing") return;
     logoutChip.classList.remove("is-open", "is-confirming", "is-fading");
     utilityRail.classList.remove("is-expanded");
-  }, 200));
+  }, themeDelay(200, 80)));
   // 第三拍：上移归位。正好是 transform 延迟结束的时刻，
   // 槽位和分隔线在同一时刻开始复原，三者一起合拢
   chipTimers.push(setTimeout(() => {
     if (chipState !== "closing") return;
     utilityRail.classList.remove("is-detaching");
     chipState = "closed";
-  }, 440));
+  }, themeDelay(440, 170)));
 }
 
 logoutChip.addEventListener("click", (event) => {
@@ -433,7 +443,7 @@ function doLogout() {
   cancelAnimationFrame(chipRaf);
   chipState = "closed";
   document.body.classList.add("is-leaving");
-  setTimeout(VS.signOut, 380);
+  setTimeout(VS.signOut, themeDelay(380, 160));
 }
 
 confirmLogout.addEventListener("click", (event) => {
@@ -460,6 +470,77 @@ function showStatus(title, detail) {
   imageDataState.append(VS.el("strong", "", title), VS.el("p", "", detail));
 }
 
+function classicImageState(imageId) {
+  const state = analysisByImage.get(Number(imageId));
+  if (state?.kind === "result") return { key: "completed", label: "已完成" };
+  if (state?.kind === "task" && ACTIVE_TASK_STATES.has(state.status)) return { key: "analyzing", label: "分析中" };
+  if (state?.kind === "task" && ["auto_annotated", "approved"].includes(state.status)) return { key: "completed", label: "已完成" };
+  if (state?.kind === "task" && state.status === "failed") return { key: "failed", label: "分析失败" };
+  return { key: "waiting", label: "待分析" };
+}
+
+function classicTargetText(imageId) {
+  const state = analysisByImage.get(Number(imageId));
+  if (state?.kind === "result" && state.labels?.length) return state.labels.slice(0, 3).join("、");
+  return targetPlanTitle.textContent && !targetPlanTitle.textContent.includes("读取")
+    ? targetPlanTitle.textContent
+    : "识别方案";
+}
+
+function syncClassicDashboardStatuses() {
+  const totals = { analyzing: 0, completed: 0, waiting: 0 };
+  loadedImages.forEach((image) => {
+    const state = classicImageState(image.id);
+    if (state.key === "completed") totals.completed += 1;
+    else if (state.key === "analyzing") totals.analyzing += 1;
+    else totals.waiting += 1;
+  });
+  classicAnalyzingCount.textContent = String(totals.analyzing);
+  classicCompletedCount.textContent = String(totals.completed);
+  classicWaitingCount.textContent = String(totals.waiting);
+
+  classicRecentState.querySelectorAll(".classic-recent-row[data-image-id]").forEach((row) => {
+    const imageId = Number(row.dataset.imageId);
+    const state = classicImageState(imageId);
+    const status = row.querySelector(".classic-row-status");
+    const target = row.querySelector(".classic-row-target");
+    status.className = `classic-row-status is-${state.key}`;
+    status.textContent = state.label;
+    target.textContent = classicTargetText(imageId);
+  });
+}
+
+function renderClassicDashboard(images) {
+  classicRecentState.replaceChildren();
+  const recent = images.slice().reverse().slice(0, 4);
+  if (!recent.length) {
+    classicRecentState.classList.add("is-empty");
+    classicRecentState.append(VS.el("p", "", "还没有图像，上传后会在这里显示最近记录。"));
+    syncClassicDashboardStatuses();
+    return;
+  }
+  classicRecentState.classList.remove("is-empty");
+  recent.forEach((image) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "classic-recent-row";
+    row.dataset.imageId = String(image.id);
+    row.innerHTML = "<img class=\"classic-row-thumb\" alt=\"\" />"
+      + "<span class=\"classic-row-file\"><strong></strong><small></small></span>"
+      + "<span class=\"classic-row-target\"></span><span class=\"classic-row-status\"></span>"
+      + "<span class=\"material-symbols-rounded classic-row-go\" aria-hidden=\"true\">chevron_right</span>";
+    row.querySelector(".classic-row-file strong").textContent = image.filename;
+    row.querySelector(".classic-row-file small").textContent = `${image.width || "?"} × ${image.height || "?"} · ${formatSize(image.size_bytes)}`;
+    row.addEventListener("click", () => {
+      showView("images");
+      openImageDetail(image);
+    });
+    classicRecentState.append(row);
+    loadThumbnail(image, row.querySelector(".classic-row-thumb"));
+  });
+  syncClassicDashboardStatuses();
+}
+
 function renderImages(images) {
   loadedImages = images;
   thumbnailUrls.forEach((url) => URL.revokeObjectURL(url));
@@ -471,6 +552,7 @@ function renderImages(images) {
   if (!images.length) {
     showStatus("还没有图像数据", "上传第一张图片，开始分析与标注。");
     syncImageToolbar();
+    renderClassicDashboard(images);
     return;
   }
 
@@ -521,6 +603,7 @@ function renderImages(images) {
   });
   imageDataState.replaceChildren(list);
   syncImageToolbar();
+  renderClassicDashboard(images);
 }
 
 /* ---------------- 勾选与批量下载 ---------------- */
@@ -792,6 +875,7 @@ function updateAnalysisLabels() {
       : analysisText(analysisId);
     renderAnnotationOverlay(analysisId);
   }
+  syncClassicDashboardStatuses();
 }
 
 function renderAnnotationOverlay(imageId) {
@@ -923,12 +1007,14 @@ function renderProjectTargets(targets, { unavailable = false } = {}) {
   if (unavailable) {
     targetPlanTitle.textContent = "暂时无法读取识别方案";
     targetPlanDetail.textContent = "仍可在选择图片后手动填写，不影响上传。";
+    syncClassicDashboardStatuses();
     return;
   }
   targetPlanTitle.textContent = targets.length ? targets.join("、") : "尚未设置识别目标";
   targetPlanDetail.textContent = targets.length
     ? `已保存 ${targets.length} 项，后续上传会自动带出。`
     : "设置一次，后续上传会自动复用。";
+  syncClassicDashboardStatuses();
 }
 
 async function loadProjectTargets({ forEditor = false } = {}) {

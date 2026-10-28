@@ -19,6 +19,8 @@ function setMode(registerMode) {
 }
 
 function beginLoginTransition() {
+  const classic = window.VSTheme?.get() === "classic";
+  const rippleDuration = classic ? ".22s" : ".72s";
   const buttonRect = submitButton.getBoundingClientRect();
   const rippleX = buttonRect.left + buttonRect.width / 2;
   const rippleY = buttonRect.top + buttonRect.height / 2;
@@ -35,7 +37,7 @@ function beginLoginTransition() {
 
   [
     { delay: "0s", stroke: "rgba(0,113,227,.82)", width: "2.4", opacity: ".9" },
-    { delay: ".07s", stroke: "rgba(53,145,235,.46)", width: "1.4", opacity: ".72" },
+    { delay: classic ? ".025s" : ".07s", stroke: "rgba(53,145,235,.46)", width: "1.4", opacity: ".72" },
   ].forEach(({ delay, stroke, width, opacity }) => {
     const ring = document.createElementNS(svgNamespace, "circle");
     ring.setAttribute("cx", rippleX);
@@ -50,7 +52,7 @@ function beginLoginTransition() {
     radius.setAttribute("attributeName", "r");
     radius.setAttribute("from", "21");
     radius.setAttribute("to", `${Math.ceil(farthestCorner + 400)}`);
-    radius.setAttribute("dur", ".72s");
+    radius.setAttribute("dur", rippleDuration);
     radius.setAttribute("begin", delay);
     radius.setAttribute("fill", "freeze");
 
@@ -58,7 +60,7 @@ function beginLoginTransition() {
     fade.setAttribute("attributeName", "opacity");
     fade.setAttribute("values", `${opacity};${opacity};0`);
     fade.setAttribute("keyTimes", "0;.82;1");
-    fade.setAttribute("dur", ".72s");
+    fade.setAttribute("dur", rippleDuration);
     fade.setAttribute("begin", delay);
     fade.setAttribute("fill", "freeze");
     ring.append(radius, fade);
@@ -67,7 +69,7 @@ function beginLoginTransition() {
   loginRipple.replaceChildren(svg);
   sessionStorage.setItem("vision_enter_transition", "1");
   authShell.classList.add("is-leaving");
-  window.setTimeout(() => location.replace("index.html"), 820);
+  window.setTimeout(() => location.replace("index.html"), classic ? 280 : 820);
 }
 
 modeToggle.addEventListener("click", () => setMode(!isRegisterMode));

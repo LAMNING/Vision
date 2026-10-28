@@ -105,6 +105,14 @@
                 </div>
                 <button class="secondary-button" id="openTargetSettings" type="button">设置识别目标</button>
               </section>
+              <section class="classic-analysis-card" aria-labelledby="classicAnalysisTitle">
+                <div class="classic-card-heading"><span class="material-symbols-rounded" aria-hidden="true">monitoring</span><strong id="classicAnalysisTitle">分析状态</strong></div>
+                <div class="classic-status-grid">
+                  <span><b id="classicAnalyzingCount">0</b><small>分析中</small></span>
+                  <span><b id="classicCompletedCount">0</b><small>已完成</small></span>
+                  <span><b id="classicWaitingCount">0</b><small>待分析</small></span>
+                </div>
+              </section>
             </section>
 
             <section class="section selection-panel" id="selectionPanel" hidden aria-labelledby="selectionTitle">
@@ -122,6 +130,14 @@
                 <small>用逗号分隔。模型会按这些类别检测并生成标注框。</small>
               </div>
               <div class="selection-actions"><span id="selectionSummary">确认后才会上传并开始分析</span><button class="primary-button" id="confirmAnalysis" type="button">确认并开始分析 <span>→</span></button></div>
+            </section>
+
+            <section class="classic-recent-panel" aria-labelledby="classicRecentTitle">
+              <div class="classic-recent-head">
+                <div><p class="section-kicker">RECENT IMAGES</p><h2 id="classicRecentTitle">最近图像</h2></div>
+                <button class="text-button" id="classicViewAll" type="button">查看全部 <span aria-hidden="true">→</span></button>
+              </div>
+              <div class="classic-recent-state" id="classicRecentState"><p>正在读取最近图像…</p></div>
             </section>
           </section>
 
@@ -378,9 +394,14 @@
             <span class="material-symbols-rounded" aria-hidden="true">palette</span>
           </div>
           <div class="theme-options" role="radiogroup" aria-label="界面主题">
+            <button class="theme-option" type="button" role="radio" aria-checked="false" data-theme-choice="classic">
+              <span class="theme-preview theme-preview-classic"><i></i><i></i><i></i></span>
+              <span><strong>经典</strong><small>紧凑 Google 工作台 · 默认</small></span>
+              <span class="material-symbols-rounded theme-check" aria-hidden="true">check_circle</span>
+            </button>
             <button class="theme-option" type="button" role="radio" aria-checked="false" data-theme-choice="clear-sky">
               <span class="theme-preview theme-preview-clear"><i></i><i></i><i></i></span>
-              <span><strong>晴蓝</strong><small>Google / Material 3 · 默认</small></span>
+              <span><strong>晴蓝</strong><small>宽松 Material 3 界面</small></span>
               <span class="material-symbols-rounded theme-check" aria-hidden="true">check_circle</span>
             </button>
             <button class="theme-option" type="button" role="radio" aria-checked="false" data-theme-choice="pure-white">

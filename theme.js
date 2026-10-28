@@ -1,13 +1,21 @@
 // Vision Studio — 主题管理
-// 默认使用「晴蓝」；「澄白」完整保留原有样式。主题只影响外观，不介入业务逻辑。
+// 默认使用「经典」；「晴蓝」与「澄白」完整保留。主题只影响外观，不介入业务逻辑。
 (() => {
   const STORAGE_KEY = "vision_theme";
+  const DEFAULT_VERSION_KEY = "vision_theme_default_v3";
   const NAV_KEY = "vision_nav_collapsed";
-  const DEFAULT_THEME = "clear-sky";
-  const THEMES = new Set(["clear-sky", "pure-white"]);
+  const DEFAULT_THEME = "classic";
+  const THEMES = new Set(["classic", "clear-sky", "pure-white"]);
 
   function readTheme() {
     try {
+      // 新增默认主题后只迁移一次，让已有浏览器也能直接看到经典主题；
+      // 用户之后仍可手动切回晴蓝或澄白，选择会继续保存。
+      if (localStorage.getItem(DEFAULT_VERSION_KEY) !== "1") {
+        localStorage.setItem(DEFAULT_VERSION_KEY, "1");
+        localStorage.setItem(STORAGE_KEY, DEFAULT_THEME);
+        return DEFAULT_THEME;
+      }
       const saved = localStorage.getItem(STORAGE_KEY);
       return THEMES.has(saved) ? saved : DEFAULT_THEME;
     } catch {
@@ -29,7 +37,9 @@
 
   function setTheme(theme, persist = true) {
     const next = THEMES.has(theme) ? theme : DEFAULT_THEME;
-    document.documentElement.dataset.theme = next;
+    // 经典复用晴蓝完整的 Material 组件层，再用 data-vision-theme 做紧凑布局覆盖。
+    document.documentElement.dataset.visionTheme = next;
+    document.documentElement.dataset.theme = next === "classic" ? "clear-sky" : next;
     if (persist) writeTheme(next);
     syncChoices(next);
     window.dispatchEvent(new CustomEvent("vision:themechange", { detail: { theme: next } }));
@@ -101,7 +111,7 @@
     if (avatar) observer.observe(avatar, { subtree: true, childList: true, attributes: true });
   }
 
-  window.VSTheme = { get: readTheme, set: setTheme, names: { "clear-sky": "晴蓝", "pure-white": "澄白" } };
+  window.VSTheme = { get: readTheme, set: setTheme, names: { classic: "经典", "clear-sky": "晴蓝", "pure-white": "澄白" } };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
   else init();
 })();
