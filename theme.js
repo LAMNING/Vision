@@ -5,19 +5,23 @@
   const DEFAULT_VERSION_KEY = "vision_theme_default_v3";
   const NAV_KEY = "vision_nav_collapsed";
   const DEFAULT_THEME = "classic";
+  // 经典主题复用 Material 组件层：data-theme 只是「基线样式别名」，恒为 clear-sky。
+  // 真实主题只认 data-vision-theme / VSTheme.get()，任何脚本都不要拿 dataset.theme 判断主题。
+  const MATERIAL_BASE = "clear-sky";
   const THEMES = new Set(["classic", "clear-sky", "pure-white"]);
 
   function readTheme() {
     try {
-      // 新增默认主题后只迁移一次，让已有浏览器也能直接看到经典主题；
-      // 用户之后仍可手动切回晴蓝或澄白，选择会继续保存。
+      // 已有显式选择一律尊重，绝不被默认主题迁移覆盖：
+      // 老用户选过晴蓝/澄白，升级后仍然停在原来的主题上。
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (THEMES.has(saved)) return saved;
+      // 首次访问（或存的旧键值非法）才落到默认主题，并只记一次标记。
       if (localStorage.getItem(DEFAULT_VERSION_KEY) !== "1") {
         localStorage.setItem(DEFAULT_VERSION_KEY, "1");
         localStorage.setItem(STORAGE_KEY, DEFAULT_THEME);
-        return DEFAULT_THEME;
       }
-      const saved = localStorage.getItem(STORAGE_KEY);
-      return THEMES.has(saved) ? saved : DEFAULT_THEME;
+      return DEFAULT_THEME;
     } catch {
       return DEFAULT_THEME;
     }
@@ -39,7 +43,8 @@
     const next = THEMES.has(theme) ? theme : DEFAULT_THEME;
     // 经典复用晴蓝完整的 Material 组件层，再用 data-vision-theme 做紧凑布局覆盖。
     document.documentElement.dataset.visionTheme = next;
-    document.documentElement.dataset.theme = next === "classic" ? "clear-sky" : next;
+    document.documentElement.dataset.theme = next === "classic" ? MATERIAL_BASE : next;
+    document.documentElement.dataset.themeBase = MATERIAL_BASE;
     if (persist) writeTheme(next);
     syncChoices(next);
     window.dispatchEvent(new CustomEvent("vision:themechange", { detail: { theme: next } }));
@@ -57,11 +62,15 @@
   document.documentElement.classList.toggle("is-nav-collapsed", readNavCollapsedEarly());
   // 首帧禁用过渡：配合 themes.css 的 .is-booting，避免侧栏宽度从 232 滑到 76。
   document.documentElement.classList.add("is-booting");
-  const clearBoot = () => requestAnimationFrame(() => requestAnimationFrame(() => {
-    document.documentElement.classList.remove("is-booting");
-  }));
-  if (document.readyState === "complete") clearBoot();
-  else window.addEventListener("load", clearBoot, { once: true });
+  // 注意不能挂在 load 上：首页「最近图像」只要有一张图没下载完，load 就一直不触发，
+  // is-booting 会一直留着，而它带的是 `.utility-rail * { transition: none !important }`,
+  // 结果是全站所有过渡静默失效（hover 全部瞬变）。
+  // 两帧后摘掉即可，超时兜底必须直接 remove、不能包在 rAF 里（rAF 在某些环境下不推进）。
+  const clearBoot = () => document.documentElement.classList.remove("is-booting");
+  const clearBootAfterPaint = () => requestAnimationFrame(() => requestAnimationFrame(clearBoot));
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", clearBootAfterPaint, { once: true });
+  else clearBootAfterPaint();
+  setTimeout(clearBoot, 1000);
 
   function readNavCollapsed() {
     return readNavCollapsedEarly();

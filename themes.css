@@ -19,18 +19,18 @@ html.is-booting .utility-rail * { transition: none !important; }
 .theme-settings { margin: 24px 0; border: 1px solid #e5e5ea; border-radius: 16px; background: #fafafa; padding: 14px; }
 .theme-settings-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .theme-settings-head h3 { margin: 0; font-size: 13px; font-weight: 650; }
-.theme-settings-head p { margin: 5px 0 0; color: #8e8e93; font-size: 10.5px; line-height: 1.55; }
+.theme-settings-head p { margin: 5px 0 0; color: #8e8e93; font-size: 11px; line-height: 1.55; }
 .theme-settings-head > .material-symbols-rounded { color: #8e8e93; font-size: 20px; }
 .theme-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-top: 13px; }
-.theme-option { display: grid; min-width: 0; grid-template-columns: 54px minmax(0, 1fr) 20px; align-items: center; gap: 10px; border: 1px solid #dedee2; border-radius: 13px; background: #fff; padding: 10px; color: #171719; font: inherit; text-align: left; cursor: pointer; }
+.theme-option { display: grid; min-width: 0; grid-template-columns: 44px minmax(0, 1fr) 18px; align-items: center; gap: 9px; border: 1px solid #dedee2; border-radius: 12px; background: #fff; padding: 10px; color: #171719; font: inherit; text-align: left; cursor: pointer; }
 .theme-option:hover { border-color: #b8b8be; background: #fcfcfd; }
 .theme-option.is-active { border-color: #8ab4f8; box-shadow: 0 0 0 2px rgba(26, 115, 232, .1); }
 .theme-option > span:nth-child(2) { display: grid; min-width: 0; gap: 3px; }
-.theme-option strong { font-size: 11.5px; font-weight: 680; }
-.theme-option small { overflow: hidden; color: #8e8e93; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.theme-option strong { font-size: 12px; font-weight: 680; }
+.theme-option small { color: #8e8e93; font-size: 11px; white-space: nowrap; }
 .theme-option .theme-check { color: #1a73e8; font-size: 18px; opacity: 0; }
 .theme-option.is-active .theme-check { opacity: 1; }
-.theme-preview { display: grid; width: 54px; height: 38px; grid-template-columns: 14px 1fr; grid-template-rows: 11px 1fr; gap: 3px; overflow: hidden; border: 1px solid rgba(0, 0, 0, .08); border-radius: 8px; padding: 4px; }
+.theme-preview { display: grid; width: 44px; height: 34px; grid-template-columns: 12px 1fr; grid-template-rows: 10px 1fr; gap: 2px; overflow: hidden; border: 1px solid rgba(0, 0, 0, .08); border-radius: 7px; padding: 3px; }
 .theme-preview i { display: block; border-radius: 3px; }
 .theme-preview i:first-child { grid-row: 1 / 3; }
 .theme-preview i:nth-child(2) { grid-column: 2; }
@@ -182,7 +182,7 @@ html[data-theme="clear-sky"] .rail-profile-avatar { display: grid; width: 40px; 
 html[data-theme="clear-sky"] .rail-profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
 html[data-theme="clear-sky"] .rail-profile-copy { display: grid; min-width: 0; flex: 1 1 auto; gap: 2px; text-align: left; }
 html[data-theme="clear-sky"] .rail-profile-copy strong { overflow: hidden; color: var(--sky-text); font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-html[data-theme="clear-sky"] .rail-profile-copy small { color: var(--sky-muted); font-size: 9.5px; }
+html[data-theme="clear-sky"] .rail-profile-copy small { color: var(--sky-muted); font-size: 11px; }
 html[data-theme="clear-sky"] .rail-profile-arrow { color: #7b8188; font-size: 18px; }
 
 html[data-theme="clear-sky"] .logout-slot { width: 100%; height: 48px; margin-top: auto; }
@@ -419,10 +419,9 @@ html[data-theme="clear-sky"] .analysis-tag { background: var(--sky-primary); }
   html[data-theme="clear-sky"] .selection-actions .primary-button { justify-content: center; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  html[data-theme="clear-sky"] .main,
-  html[data-theme="clear-sky"] .utility-rail { transition: none !important; }
-}
+/* 「减少动态效果」的兜底统一放在文件末尾的全站统一层里，
+   这里不再单独写 clear-sky 版：带 !important 的 transition:none 会把
+   侧栏收展也一起关掉，而统一层已经覆盖了该覆盖的元素。 */
 
 /* ==========================================================================
    晴蓝 · 视觉打磨（第三十二轮修复）
@@ -510,7 +509,7 @@ html[data-theme="clear-sky"] .detail-image-stack { border-radius: 14px; overflow
 html[data-theme="clear-sky"] #railCollapse { color: #7b8188; }
 html[data-theme="clear-sky"] #railCollapse:hover { color: var(--sky-text); background: var(--sky-surface-high); }
 html[data-theme="clear-sky"] .logout-slot { border-top: 1px solid var(--sky-outline-soft); padding-top: 6px; }
-html[data-theme="clear-sky"] .logout-chip-note { color: #7b8188; font-size: 9.5px; }
+html[data-theme="clear-sky"] .logout-chip-note { color: #7b8188; font-size: 11px; }
 
 /* 10. 稳定滚动条占位：刷新后图片加载出来、页面从"不滚动"变成"滚动"时，
        内容列宽度会突然少 15px，文字随之重排（看起来像"文字突然变一行"）。
@@ -575,7 +574,7 @@ html[data-theme="clear-sky"] .result-uploader { background: rgba(31, 31, 31, .55
 /* 晴蓝 · 小组标题下的一行元信息原来太淡（10.5px 浅灰），抬到正文级 */
 html[data-theme="clear-sky"] .team-info-title p { color: var(--sky-muted); font-size: 11px; }
 /* 主题卡第二行说明原来 9px，低于全站可读下限 */
-html[data-theme="clear-sky"] .theme-option small { font-size: 10.5px; }
+html[data-theme="clear-sky"] .theme-option small { font-size: 11px; }
 /* 勾选态底色收一点，别把整行压成一块色 */
 html[data-theme="clear-sky"] .image-row.is-picked { background: #e8f0fe; }
 html[data-theme="clear-sky"] .image-row.is-picked:hover { background: #ddeafc; }
@@ -597,7 +596,7 @@ html[data-theme="clear-sky"] .image-row.is-picked:hover { background: #ddeafc; }
    ========================================================================== */
 html[data-theme="clear-sky"] .app-brand-ent i { background: var(--sky-outline-soft); }
 html[data-theme="clear-sky"] .app-brand-ent strong { color: var(--sky-text); font-size: 13px; }
-html[data-theme="clear-sky"] .app-brand-ent small { border-radius: 6px; background: #f7f0da; color: #7a6021; font-size: 10px; }
+html[data-theme="clear-sky"] .app-brand-ent small { border-radius: 6px; background: #f7f0da; color: #7a6021; font-size: 11px; }
 html[data-theme="clear-sky"].has-enterprise .app-avatar::after,
 html[data-theme="clear-sky"].has-enterprise .rail-profile-avatar::after,
 html[data-theme="clear-sky"] .ent-member-line .member-avatar-wrap::after { box-shadow: 0 0 0 2px var(--sky-surface); }
@@ -615,7 +614,7 @@ html[data-theme="clear-sky"] .ent-quota-foot { color: var(--sky-muted); font-siz
 
 html[data-theme="clear-sky"] .ent-notice { border-color: #ece2c8; border-radius: 16px; background: #fdf9ee; padding: 12px 13px; }
 html[data-theme="clear-sky"] .ent-notice .material-symbols-rounded { color: #a8842a; font-size: 20px; }
-html[data-theme="clear-sky"] .ent-notice small { color: #8a6d1f; font-size: 10px; }
+html[data-theme="clear-sky"] .ent-notice small { color: #8a6d1f; font-size: 11px; }
 html[data-theme="clear-sky"] .ent-notice p { color: #4a4132; font-size: 12px; }
 
 html[data-theme="clear-sky"] .ent-presence { border-top-color: var(--sky-outline-soft); color: var(--sky-muted); font-size: 12px; }
@@ -629,7 +628,7 @@ html[data-theme="clear-sky"] .ent-tab { border-radius: 999px 999px 0 0; padding:
 html[data-theme="clear-sky"] .ent-tab:hover { color: var(--sky-text); background: var(--sky-surface-high); }
 html[data-theme="clear-sky"] .ent-tab.is-active { color: var(--sky-primary); }
 html[data-theme="clear-sky"] .ent-tab.is-active::after { right: 12px; left: 12px; height: 3px; background: var(--sky-primary); }
-html[data-theme="clear-sky"] .ent-tab b { background: var(--sky-primary-container); color: var(--sky-on-primary-container); font-size: 10px; }
+html[data-theme="clear-sky"] .ent-tab b { background: var(--sky-primary-container); color: var(--sky-on-primary-container); font-size: 11px; }
 
 html[data-theme="clear-sky"] .review-row { border-bottom-color: var(--sky-outline-soft); padding: 12px 2px; }
 html[data-theme="clear-sky"] .review-thumb { border-radius: 10px; background: var(--sky-surface-high); }
@@ -642,7 +641,7 @@ html[data-theme="clear-sky"] .mini-button.is-pass:hover { background: #e5f6e9; }
 html[data-theme="clear-sky"] .mini-button.is-reject { border-color: #f2c9c4; background: var(--sky-error-container); color: var(--sky-danger); }
 html[data-theme="clear-sky"] .mini-button.is-reject:hover { background: #f6d4d1; }
 
-html[data-theme="clear-sky"] .review-flag { border-radius: 999px; padding: 3px 8px; font-size: 10px; }
+html[data-theme="clear-sky"] .review-flag { border-radius: 999px; padding: 3px 8px; font-size: 11px; }
 html[data-theme="clear-sky"] .review-flag.is-pending { background: rgba(179, 125, 12, .95); }
 
 html[data-theme="clear-sky"] .log-dot { background: var(--sky-outline); }
@@ -689,7 +688,7 @@ html[data-theme="clear-sky"] .target-pick-copy small { color: var(--sky-muted); 
 html[data-theme="clear-sky"] .target-pick-go { color: var(--sky-outline); }
 html[data-theme="clear-sky"] .target-pick:hover .target-pick-go { color: var(--sky-primary); }
 
-html[data-theme="clear-sky"] .rank-medal { width: 16px; height: 16px; font-size: 9.5px; }
+html[data-theme="clear-sky"] .rank-medal { width: 18px; height: 18px; font-size: 11px; }
 html[data-theme="clear-sky"] .ent-empty-inline strong { color: var(--sky-text); }
 html[data-theme="clear-sky"] .ent-empty-inline p { color: var(--sky-muted); }
 
@@ -703,15 +702,15 @@ html[data-vision-theme="classic"] {
   scroll-behavior: auto;
 }
 html[data-vision-theme="classic"] body { background: #f4f7fb; }
-html[data-vision-theme="classic"] .main { transition-duration: 140ms; }
+html[data-vision-theme="classic"] .main { transition-duration: 240ms; }
 html[data-vision-theme="classic"] .app-bar { min-height: 60px; padding-inline: clamp(22px, 3vw, 44px); }
 html[data-vision-theme="classic"] .utility-rail {
   background: #f7f9fd;
   padding: 12px 10px;
-  transition-duration: 140ms;
+  transition-duration: 240ms;
 }
-html[data-vision-theme="classic"] .utility-rail button:not(.logout-chip) { height: 44px; border-radius: 14px; padding-inline: 14px; transition-duration: 110ms; }
-html[data-vision-theme="classic"] .utility-rail .rail-label { margin-left: 13px; font-size: 12.5px; transition-duration: 120ms; }
+html[data-vision-theme="classic"] .utility-rail button:not(.logout-chip) { height: 44px; border-radius: 14px; padding-inline: 14px; transition-duration: 160ms; }
+html[data-vision-theme="classic"] .utility-rail .rail-label { margin-left: 13px; font-size: 13px; transition-duration: 160ms; }
 html[data-vision-theme="classic"] #railProfile { height: 58px; margin-bottom: 12px; border-radius: 16px; padding: 7px; }
 html[data-vision-theme="classic"] .rail-profile-avatar { width: 38px; height: 38px; }
 html[data-vision-theme="classic"] .logout-slot,
@@ -731,7 +730,7 @@ html[data-vision-theme="classic"] .upload-hero {
   gap: 14px;
 }
 html[data-vision-theme="classic"] .upload-hero > div:first-child { grid-column: 1 / -1; margin-bottom: 3px; }
-html[data-vision-theme="classic"] .upload-hero .eyebrow { margin-bottom: 6px; font-size: 10px; }
+html[data-vision-theme="classic"] .upload-hero .eyebrow { margin-bottom: 6px; font-size: 11px; }
 html[data-vision-theme="classic"] .upload-hero h1 { font-size: clamp(28px, 2.7vw, 36px); letter-spacing: -.03em; }
 html[data-vision-theme="classic"] .upload-hero > div:first-child > p { margin-top: 5px; font-size: 12px; }
 html[data-vision-theme="classic"] .upload-zone {
@@ -789,7 +788,7 @@ html[data-vision-theme="classic"] .classic-status-grid > span:last-child { paddi
 html[data-vision-theme="classic"] .classic-status-grid b { color: var(--sky-primary); font-size: 24px; line-height: 1; }
 html[data-vision-theme="classic"] .classic-status-grid > span:nth-child(2) b { color: #188038; }
 html[data-vision-theme="classic"] .classic-status-grid > span:nth-child(3) b { color: #7b8188; }
-html[data-vision-theme="classic"] .classic-status-grid small { color: var(--sky-muted); font-size: 9.5px; white-space: nowrap; }
+html[data-vision-theme="classic"] .classic-status-grid small { color: var(--sky-muted); font-size: 11px; white-space: nowrap; }
 
 html[data-vision-theme="classic"] .selection-panel { margin-top: 16px; }
 html[data-vision-theme="classic"] .classic-recent-panel {
@@ -802,7 +801,7 @@ html[data-vision-theme="classic"] .classic-recent-panel {
   box-shadow: 0 1px 3px rgba(60, 64, 67, .08);
 }
 html[data-vision-theme="classic"] .classic-recent-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; padding: 15px 17px 12px; }
-html[data-vision-theme="classic"] .classic-recent-head .section-kicker { margin: 0 0 3px; font-size: 8.5px; }
+html[data-vision-theme="classic"] .classic-recent-head .section-kicker { margin: 0 0 3px; font-size: 11px; }
 html[data-vision-theme="classic"] .classic-recent-head h2 { margin: 0; color: var(--sky-text); font-size: 16px; letter-spacing: -.02em; }
 html[data-vision-theme="classic"] .classic-recent-head .text-button { color: var(--sky-primary); font-size: 11px; }
 html[data-vision-theme="classic"] .classic-recent-state { border-top: 1px solid var(--sky-outline-soft); }
@@ -829,36 +828,17 @@ html[data-vision-theme="classic"] .classic-recent-row:hover { background: #f7faf
 html[data-vision-theme="classic"] .classic-row-thumb { width: 48px; height: 48px; border-radius: 9px; background: var(--sky-surface-high); object-fit: cover; }
 html[data-vision-theme="classic"] .classic-row-file { display: grid; min-width: 0; gap: 4px; }
 html[data-vision-theme="classic"] .classic-row-file strong { overflow: hidden; color: var(--sky-text); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
-html[data-vision-theme="classic"] .classic-row-file small { color: var(--sky-muted); font-size: 9.5px; }
-html[data-vision-theme="classic"] .classic-row-target { overflow: hidden; color: var(--sky-primary); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
-html[data-vision-theme="classic"] .classic-row-status { justify-self: start; border-radius: 999px; background: var(--sky-surface-high); padding: 5px 9px; color: var(--sky-muted); font-size: 10px; white-space: nowrap; }
+html[data-vision-theme="classic"] .classic-row-file small { color: var(--sky-muted); font-size: 11px; }
+html[data-vision-theme="classic"] .classic-row-target { overflow: hidden; color: var(--sky-primary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+html[data-vision-theme="classic"] .classic-row-status { justify-self: start; border-radius: 999px; background: var(--sky-surface-high); padding: 5px 9px; color: var(--sky-muted); font-size: 11px; white-space: nowrap; }
 html[data-vision-theme="classic"] .classic-row-status.is-analyzing { background: #e8f0fe; color: var(--sky-primary); }
 html[data-vision-theme="classic"] .classic-row-status.is-completed { background: #e6f4ea; color: #137333; }
 html[data-vision-theme="classic"] .classic-row-status.is-failed { background: var(--sky-error-container); color: var(--sky-danger); }
 html[data-vision-theme="classic"] .classic-row-go { color: #9aa0a6; font-size: 18px; }
 
-/* 经典主题所有主要反馈控制在约 100–180ms；加载旋转等状态动画不受影响。 */
-html[data-vision-theme="classic"] body.is-arriving .utility-rail,
-html[data-vision-theme="classic"] body.is-arriving .main,
-html[data-vision-theme="classic"] .motion-ready .upload-hero > div,
-html[data-vision-theme="classic"] .motion-ready .upload-zone,
-html[data-vision-theme="classic"] .motion-ready .image-row,
-html[data-vision-theme="classic"] .motion-ready .detail-view.is-visible .detail-preview,
-html[data-vision-theme="classic"] .motion-ready .detail-view.is-visible .detail-meta {
-  animation-duration: 150ms !important;
-  animation-delay: 0ms !important;
-}
-html[data-vision-theme="classic"] .dialog-backdrop { transition-duration: 110ms; }
-html[data-vision-theme="classic"] .danger-dialog,
-html[data-vision-theme="classic"] .upload-toast,
-html[data-vision-theme="classic"] .motion-ready .upload-zone,
-html[data-vision-theme="classic"] .motion-ready .image-row,
-html[data-vision-theme="classic"] .motion-ready .back-button,
-html[data-vision-theme="classic"] .motion-ready .delete-button { transition-duration: 120ms !important; }
-html[data-vision-theme="classic"] .auth-shell.is-leaving .auth-card,
-html[data-vision-theme="classic"] .auth-shell.is-leaving .auth-showcase { animation-duration: 140ms !important; }
-html[data-vision-theme="classic"] body.is-leaving .app-shell,
-html[data-vision-theme="classic"] body.is-leaving .utility-rail { transition-duration: 140ms !important; }
+/* 动效节奏不在这里各自为政：三套主题共用文件末尾「全站统一层」的一套时长。
+   本段只保留经典主题特有的观感差异（无位移的悬停、更短的反馈）。 */
+html[data-vision-theme="classic"] .dialog-backdrop { transition-duration: 160ms; }
 
 @media (max-width: 940px) {
   html[data-vision-theme="classic"] { --sky-nav-width: 200px; }
@@ -885,4 +865,161 @@ html[data-vision-theme="classic"] body.is-leaving .utility-rail { transition-dur
   .theme-options { grid-template-columns: 1fr; }
   html[data-vision-theme="classic"] .classic-status-grid > span { padding-inline: 8px; }
   html[data-vision-theme="classic"] .classic-recent-head { padding-inline: 13px; }
+}
+
+/* ==========================================================================
+   全站统一层：三套主题共用同一套「尺度」与「节奏」
+   --------------------------------------------------------------------------
+   只统一尺度（内容列宽、标题阶梯、内页密度）与节奏（动效时长）。
+   各主题的表面语言 —— 配色、边框、阴影、侧栏形态 —— 仍然各自独立。
+   这样切栏目时标题左边缘不再横跳，切主题时进入速度也不会一快一慢。
+   ========================================================================== */
+:root {
+  --layout-content: 1280px;
+  --layout-gutter: 64px;
+  --motion-fast: 140ms;   /* 悬停、按下 */
+  --motion-base: 260ms;   /* 元素进入、侧栏收展 */
+  --motion-slow: 320ms;   /* 登录开场 */
+  --fs-display: clamp(28px, 2.3vw, 34px);
+  --fs-page: clamp(22px, 1.7vw, 26px);
+}
+
+/* ---------- 1. 内容列：760 / 1080 / 1100 三档归一 ----------
+   只作用于晴蓝与经典（经典把 data-theme 复用成 clear-sky）。
+   澄白是「极简」档，窄栏与大幅留白是它的设计语言，保持原样。 */
+html[data-theme="clear-sky"] .content,
+html[data-theme="clear-sky"] .content.is-wide {
+  width: min(var(--layout-content), calc(100% - var(--layout-gutter)));
+  margin-inline: auto;
+  padding-block: 28px 64px;
+}
+html[data-theme="clear-sky"] .detail-view {
+  width: min(var(--layout-content), calc(100% - var(--layout-gutter)));
+  margin-inline: auto;
+  padding-block: 26px 64px;
+}
+/* 宽屏再加一档：1920 下不再只占中间 1200 列、左右各空近 300px */
+@media (min-width: 1600px) {
+  :root { --layout-content: 1560px; --layout-gutter: 80px; }
+}
+
+/* ---------- 2. 标题阶梯：首页 34 / 内页 26 / 区块 18 ---------- */
+html[data-theme="clear-sky"] .hero h1,
+html[data-theme="clear-sky"] .upload-hero h1 {
+  font-size: var(--fs-display);
+  letter-spacing: -.03em;
+  line-height: 1.12;
+}
+html[data-theme="clear-sky"] .view-hero h1,
+html[data-theme="clear-sky"] .team-head h1 {
+  font-size: var(--fs-page);
+  letter-spacing: -.025em;
+  line-height: 1.18;
+}
+
+/* ---------- 3. 内页密度：向首页看齐，不再「首页紧凑、内页空」 ---------- */
+html[data-theme="clear-sky"] .hero { padding-bottom: 24px; }
+html[data-theme="clear-sky"] .view-hero { padding: 14px 0 22px; }
+html[data-theme="clear-sky"] .view-hero > p:not(.section-kicker) { max-width: 580px; margin: 7px 0 0; font-size: 13px; line-height: 1.6; }
+html[data-theme="clear-sky"] .team-head { padding: 14px 0 16px; }
+html[data-theme="clear-sky"] .image-row { min-height: 64px; }
+html[data-theme="clear-sky"] .empty-state { min-height: 168px; }
+
+/* ---------- 3.5 小字下限：全站说明字统一到 11px，不再有 8.5/9/9.5/10 的碎档 ---------- */
+html[data-theme] .section-kicker,
+html[data-theme] .panel-sub,
+html[data-theme] .empty-state p { font-size: 11px; }
+
+/* ---------- 4. 动效：同一套节奏，不删任何既有动画 ---------- */
+.motion-ready .upload-hero > div { animation-duration: var(--motion-base); }
+.motion-ready .upload-zone { animation-duration: var(--motion-base); animation-delay: 40ms; transition-duration: 200ms; }
+.motion-ready .image-row {
+  animation-duration: var(--motion-base);
+  animation-delay: calc(var(--row-index, 0) * 18ms);
+  transition-duration: 160ms;
+}
+.motion-ready .detail-view.is-visible .detail-preview { animation-duration: var(--motion-base); }
+.motion-ready .detail-view.is-visible .detail-meta { animation-duration: var(--motion-base); animation-delay: 40ms; }
+.motion-ready .back-button,
+.motion-ready .delete-button { transition-duration: 160ms; }
+
+/* 侧栏与主区：收展、登录后飞入、退出收回共用一个时长，
+   避免「侧栏还在滑、内容已经停了」的错位感。
+   注意必须写 transition 简写：styles.css 顶部有 `* { transition: none }` 的全站重置，
+   只写 transition-duration 时没有过渡属性，时长等于没用。 */
+html[data-theme] .utility-rail {
+  transition: width var(--motion-base) cubic-bezier(.34, 1.42, .52, 1),
+    padding var(--motion-base) cubic-bezier(.2, 0, 0, 1),
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+html[data-theme] .rail-divider {
+  transition: width var(--motion-base) cubic-bezier(.34, 1.42, .52, 1),
+    margin var(--motion-base) cubic-bezier(.34, 1.42, .52, 1),
+    opacity 200ms ease;
+}
+html[data-theme] .logout-slot { transition: height var(--motion-base) cubic-bezier(.34, 1.42, .52, 1); }
+html[data-theme] .utility-rail button:not(.logout-chip) {
+  transition: color 160ms ease, background 160ms ease,
+    width var(--motion-base) cubic-bezier(.34, 1.42, .52, 1);
+}
+html[data-theme] .main { transition: margin-left var(--motion-base) cubic-bezier(.2, 0, 0, 1); }
+html[data-theme] .utility-rail .rail-label {
+  transition: max-width var(--motion-base) cubic-bezier(.2, 0, 0, 1),
+    margin-left var(--motion-base) cubic-bezier(.2, 0, 0, 1),
+    opacity 160ms ease;
+}
+/* 侧栏展开时文字最后出现：延迟要短于侧栏宽度动画，否则字出来时框已经停住了 */
+html[data-theme] .utility-rail.is-expanded .rail-label { transition-delay: 120ms; }
+html[data-theme] body.is-arriving .utility-rail { animation-duration: var(--motion-base); animation-delay: 180ms; }
+html[data-theme] body.is-arriving .main { animation-duration: var(--motion-base); }
+/* 退出退场的过渡必须写全：上面 .utility-rail 的简写已经把 property 换成收展那一组，
+   只补 duration 会让 opacity / transform 直接瞬变，三段式收回就没了。 */
+html[data-theme] body.is-leaving .utility-rail { transition: opacity 240ms ease, transform 240ms ease; }
+html[data-theme] body.is-leaving .app-shell {
+  transition: transform 300ms cubic-bezier(.4, 0, .2, 1), opacity 260ms cubic-bezier(.4, 0, .2, 1);
+}
+
+/* 登录：开场略慢于内页（有「落地」的仪式感），离开仍是一镜到底的三段式。 */
+html[data-theme] .auth-card { animation-duration: var(--motion-slow); }
+html[data-theme] .sample-image { animation-duration: var(--motion-slow); }
+html[data-theme] .auth-shell.is-leaving .auth-card { animation-duration: 240ms !important; }
+html[data-theme] .auth-shell.is-leaving .auth-showcase { animation-duration: 220ms !important; }
+
+/* 按钮的悬停缩放原本是瞬变，补一条与全局一致的短过渡 */
+html[data-theme] .primary-button,
+html[data-theme] .secondary-button {
+  transition-property: transform, background, border-color, color, box-shadow;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: ease;
+}
+
+/* 统一层的覆盖规则都比原规则更靠后，必须自己兜住「减少动态效果」偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .motion-ready .upload-hero > div,
+  .motion-ready .upload-zone,
+  .motion-ready .image-row,
+  .motion-ready .detail-view.is-visible .detail-preview,
+  .motion-ready .detail-view.is-visible .detail-meta,
+  html[data-theme] body.is-arriving .utility-rail,
+  html[data-theme] body.is-arriving .main,
+  html[data-theme] .utility-rail,
+  html[data-theme] .rail-divider,
+  html[data-theme] .logout-slot,
+  html[data-theme] .rail-label,
+  html[data-theme] .auth-card,
+  html[data-theme] .sample-image {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@media (max-width: 820px) {
+  html[data-theme="clear-sky"] .content,
+  html[data-theme="clear-sky"] .content.is-wide,
+  html[data-theme="clear-sky"] .detail-view {
+    width: calc(100% - 32px);
+    padding-block: 20px 100px;
+  }
 }
