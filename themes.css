@@ -583,3 +583,106 @@ html[data-theme="clear-sky"] .image-row.is-picked:hover { background: #ddeafc; }
     grid-template-columns: repeat(5, minmax(44px, 1fr));
   }
 }
+
+/* ==========================================================================
+   晴蓝 · 企业空间
+   金色是企业身份的识别色，在晴蓝里保留，但每个金面都配 M3 的中性描边，
+   避免一块暖色浮在冷色调界面上。
+   ========================================================================== */
+html[data-theme="clear-sky"] .app-brand-ent i { background: var(--sky-outline-soft); }
+html[data-theme="clear-sky"] .app-brand-ent strong { color: var(--sky-text); font-size: 13px; }
+html[data-theme="clear-sky"] .app-brand-ent small { border-radius: 6px; background: #f7f0da; color: #7a6021; font-size: 10px; }
+html[data-theme="clear-sky"].has-enterprise .app-avatar::after,
+html[data-theme="clear-sky"].has-enterprise .rail-profile-avatar::after,
+html[data-theme="clear-sky"] .ent-member-line .member-avatar-wrap::after { box-shadow: 0 0 0 2px var(--sky-surface); }
+
+html[data-theme="clear-sky"] .ent-id-chip { border-color: #e6dcc0; border-radius: 999px; background: #faf6ea; color: #7a6021; font-size: 11px; }
+html[data-theme="clear-sky"] .ent-badge { border-radius: 14px; background: linear-gradient(140deg, #1f1b16, #43392b); color: #f0d79a; }
+
+html[data-theme="clear-sky"] .ent-quota-head { color: var(--sky-muted); font-size: 12px; }
+html[data-theme="clear-sky"] .ent-quota-head b { color: var(--sky-text); font-size: 13px; }
+html[data-theme="clear-sky"] .ent-quota-track { border-radius: 999px; background: var(--sky-surface-high); height: 8px; }
+html[data-theme="clear-sky"] .ent-quota-track i { background: linear-gradient(90deg, #d8b64a, #b8912f); }
+html[data-theme="clear-sky"] .ent-quota-track i.is-warn { background: linear-gradient(90deg, #e2a63c, #c9821a); }
+html[data-theme="clear-sky"] .ent-quota-track i.is-full { background: linear-gradient(90deg, #d85a4e, #b3261e); }
+html[data-theme="clear-sky"] .ent-quota-foot { color: var(--sky-muted); font-size: 11px; }
+
+html[data-theme="clear-sky"] .ent-notice { border-color: #ece2c8; border-radius: 16px; background: #fdf9ee; padding: 12px 13px; }
+html[data-theme="clear-sky"] .ent-notice .material-symbols-rounded { color: #a8842a; font-size: 20px; }
+html[data-theme="clear-sky"] .ent-notice small { color: #8a6d1f; font-size: 10px; }
+html[data-theme="clear-sky"] .ent-notice p { color: #4a4132; font-size: 12px; }
+
+html[data-theme="clear-sky"] .ent-presence { border-top-color: var(--sky-outline-soft); color: var(--sky-muted); font-size: 12px; }
+html[data-theme="clear-sky"] .ent-invisible { color: var(--sky-muted); font-size: 11px; }
+html[data-theme="clear-sky"] .ent-invisible input { accent-color: var(--sky-primary); }
+html[data-theme="clear-sky"] .presence-dot.is-online { background: #1e8e3e; box-shadow: 0 0 0 3px rgba(30, 142, 62, .16); }
+html[data-theme="clear-sky"] .ent-member-line.is-online .member-line-name strong { color: #1e8e3e; }
+
+html[data-theme="clear-sky"] .ent-tabs { gap: 4px; border-bottom-color: var(--sky-outline-soft); }
+html[data-theme="clear-sky"] .ent-tab { border-radius: 999px 999px 0 0; padding: 9px 15px; color: var(--sky-muted); font-size: 12.5px; }
+html[data-theme="clear-sky"] .ent-tab:hover { color: var(--sky-text); background: var(--sky-surface-high); }
+html[data-theme="clear-sky"] .ent-tab.is-active { color: var(--sky-primary); }
+html[data-theme="clear-sky"] .ent-tab.is-active::after { right: 12px; left: 12px; height: 3px; background: var(--sky-primary); }
+html[data-theme="clear-sky"] .ent-tab b { background: var(--sky-primary-container); color: var(--sky-on-primary-container); font-size: 10px; }
+
+html[data-theme="clear-sky"] .review-row { border-bottom-color: var(--sky-outline-soft); padding: 12px 2px; }
+html[data-theme="clear-sky"] .review-thumb { border-radius: 10px; background: var(--sky-surface-high); }
+html[data-theme="clear-sky"] .review-copy strong { color: var(--sky-text); font-size: 13px; }
+html[data-theme="clear-sky"] .review-copy small { color: var(--sky-muted); font-size: 11px; }
+html[data-theme="clear-sky"] .mini-button { border-color: var(--sky-outline-soft); border-radius: 999px; background: var(--sky-surface); padding: 6px 13px; color: var(--sky-muted); font-size: 11.5px; }
+html[data-theme="clear-sky"] .mini-button:hover { border-color: var(--sky-outline); background: var(--sky-surface-high); }
+html[data-theme="clear-sky"] .mini-button.is-pass { border-color: #b7dfc0; background: #f1faf3; color: #1e8e3e; }
+html[data-theme="clear-sky"] .mini-button.is-pass:hover { background: #e5f6e9; }
+html[data-theme="clear-sky"] .mini-button.is-reject { border-color: #f2c9c4; background: var(--sky-error-container); color: var(--sky-danger); }
+html[data-theme="clear-sky"] .mini-button.is-reject:hover { background: #f6d4d1; }
+
+html[data-theme="clear-sky"] .review-flag { border-radius: 999px; padding: 3px 8px; font-size: 10px; }
+html[data-theme="clear-sky"] .review-flag.is-pending { background: rgba(179, 125, 12, .95); }
+
+html[data-theme="clear-sky"] .log-dot { background: var(--sky-outline); }
+html[data-theme="clear-sky"] .log-item:first-child .log-dot { background: #b8912f; }
+html[data-theme="clear-sky"] .log-dot::before { background: var(--sky-outline-soft); }
+html[data-theme="clear-sky"] .log-body strong { color: var(--sky-text); font-size: 12.5px; }
+html[data-theme="clear-sky"] .log-body small { color: var(--sky-muted); font-size: 11px; }
+
+html[data-theme="clear-sky"] .report-date { border-color: var(--sky-outline-soft); border-radius: 999px; background: var(--sky-surface); padding: 7px 13px; color: var(--sky-muted); font-size: 12px; }
+html[data-theme="clear-sky"] .report-stats { gap: 10px; }
+html[data-theme="clear-sky"] .report-cell { border-color: var(--sky-outline-soft); border-radius: 16px; background: var(--sky-surface-low); padding: 12px 14px; }
+html[data-theme="clear-sky"] .report-cell b { color: var(--sky-text); font-size: 20px; }
+html[data-theme="clear-sky"] .report-cell small { color: var(--sky-muted); font-size: 11px; }
+html[data-theme="clear-sky"] .report-cell.is-pass b { color: #1e8e3e; }
+html[data-theme="clear-sky"] .report-cell.is-reject b { color: var(--sky-danger); }
+html[data-theme="clear-sky"] .report-cell.is-pending b { color: #b07d16; }
+html[data-theme="clear-sky"] .report-table th { border-bottom-color: var(--sky-outline-soft); color: var(--sky-muted); font-size: 11px; }
+html[data-theme="clear-sky"] .report-table td { border-bottom-color: var(--sky-outline-soft); color: var(--sky-text); font-size: 12px; }
+html[data-theme="clear-sky"] .report-table td.is-pass { color: #1e8e3e; }
+html[data-theme="clear-sky"] .report-table td.is-reject { color: var(--sky-danger); }
+html[data-theme="clear-sky"] .report-table td.is-pending { color: #b07d16; }
+
+html[data-theme="clear-sky"] .ent-settings-block { border-top-color: var(--sky-outline-soft); }
+html[data-theme="clear-sky"] .ent-settings-block h3 { color: var(--sky-text); font-size: 14px; }
+html[data-theme="clear-sky"] .ent-settings-block h3 b { background: var(--sky-primary-container); color: var(--sky-on-primary-container); }
+html[data-theme="clear-sky"] .ent-code-row code { border-color: #ddd0ad; border-radius: 14px; background: #faf6ea; color: #6f5719; font-size: 14px; }
+html[data-theme="clear-sky"] .ent-request { border-bottom-color: var(--sky-outline-soft); }
+html[data-theme="clear-sky"] .ent-request-copy strong { color: var(--sky-text); font-size: 12.5px; }
+html[data-theme="clear-sky"] .ent-request-copy small { color: var(--sky-muted); font-size: 11px; }
+html[data-theme="clear-sky"] .ent-check { color: var(--sky-muted); font-size: 12px; }
+html[data-theme="clear-sky"] .ent-check input { accent-color: var(--sky-primary); }
+html[data-theme="clear-sky"] .ent-field-grid label { color: var(--sky-muted); font-size: 12px; }
+html[data-theme="clear-sky"] .ent-member-manage-row { border-bottom-color: var(--sky-outline-soft); }
+html[data-theme="clear-sky"] .ent-member-manage-copy strong { color: var(--sky-text); font-size: 12.5px; }
+html[data-theme="clear-sky"] .ent-member-manage-copy small { color: var(--sky-muted); font-size: 11px; }
+html[data-theme="clear-sky"] .ent-role-select { border-color: var(--sky-outline-soft); border-radius: 999px; background: var(--sky-surface); color: var(--sky-text); font-size: 11.5px; }
+html[data-theme="clear-sky"] .text-button.is-danger { color: var(--sky-danger); }
+
+html[data-theme="clear-sky"] .target-pick { border-color: var(--sky-outline-soft); border-radius: 18px; background: var(--sky-surface); padding: 14px 16px; }
+html[data-theme="clear-sky"] .target-pick:hover { border-color: var(--sky-outline); background: var(--sky-surface-high); }
+html[data-theme="clear-sky"] .target-pick > .material-symbols-rounded { color: var(--sky-muted); font-size: 22px; }
+html[data-theme="clear-sky"] .target-pick-copy strong { color: var(--sky-text); font-size: 13px; }
+html[data-theme="clear-sky"] .target-pick-copy small { color: var(--sky-muted); font-size: 11.5px; }
+html[data-theme="clear-sky"] .target-pick-go { color: var(--sky-outline); }
+html[data-theme="clear-sky"] .target-pick:hover .target-pick-go { color: var(--sky-primary); }
+
+html[data-theme="clear-sky"] .rank-medal { width: 16px; height: 16px; font-size: 9.5px; }
+html[data-theme="clear-sky"] .ent-empty-inline strong { color: var(--sky-text); }
+html[data-theme="clear-sky"] .ent-empty-inline p { color: var(--sky-muted); }

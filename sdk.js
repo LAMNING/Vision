@@ -550,6 +550,112 @@
       return { blob: out.body, contentType: out.headers.get('content-type') || 'image/png' };
     }
 
+    // ---- 企业空间（Vision Studio 本地扩展，官方后端尚未提供） ----
+    // 真实后端没有这组端点时会明确抛 404，前端据此展示「后端未开放」而不是崩掉。
+
+    listEnterprises() {
+      return this._json('GET', '/enterprises');
+    }
+
+    createEnterprise(name, email) {
+      return this._json('POST', '/enterprises', { json: { name, email } });
+    }
+
+    getEnterprise(enterpriseId) {
+      return this._json('GET', `/enterprises/${enterpriseId}`);
+    }
+
+    updateEnterprise(enterpriseId, fields) {
+      return this._json('PATCH', `/enterprises/${enterpriseId}`, { json: fields });
+    }
+
+    deleteEnterprise(enterpriseId) {
+      return this._raw('DELETE', `/enterprises/${enterpriseId}`);
+    }
+
+    /** 凭企业码申请加入。管理员审批前状态是 pending。 */
+    joinEnterprise(code, message) {
+      return this._json('POST', '/enterprises/join', { json: { code, message } });
+    }
+
+    listEnterpriseRequests(enterpriseId) {
+      return this._json('GET', `/enterprises/${enterpriseId}/requests`);
+    }
+
+    /** decision: approve | reject */
+    decideEnterpriseRequest(enterpriseId, accountId, decision) {
+      return this._json('POST', `/enterprises/${enterpriseId}/requests/${accountId}/${decision}`);
+    }
+
+    listEnterpriseMembers(enterpriseId) {
+      return this._json('GET', `/enterprises/${enterpriseId}/members`);
+    }
+
+    inviteEnterpriseMember(enterpriseId, username, role = 'member') {
+      return this._json('POST', `/enterprises/${enterpriseId}/members`, { json: { username, role } });
+    }
+
+    updateEnterpriseMember(enterpriseId, accountId, fields) {
+      return this._json('PATCH', `/enterprises/${enterpriseId}/members/${accountId}`, { json: fields });
+    }
+
+    removeEnterpriseMember(enterpriseId, accountId) {
+      return this._raw('DELETE', `/enterprises/${enterpriseId}/members/${accountId}`);
+    }
+
+    leaveEnterprise(enterpriseId) {
+      return this._raw('POST', `/enterprises/${enterpriseId}/leave`);
+    }
+
+    listEnterpriseImages(enterpriseId) {
+      return this._json('GET', `/enterprises/${enterpriseId}/images`);
+    }
+
+    /** 企业图库上传：后端收复数 `files`，与项目上传一致。 */
+    uploadEnterpriseImages(enterpriseId, files) {
+      const list = Array.isArray(files) ? files : [files];
+      return this._json('POST', `/enterprises/${enterpriseId}/images`, { form: formFiles(list, 'files') });
+    }
+
+    enterpriseUsage(enterpriseId) {
+      return this._json('GET', `/enterprises/${enterpriseId}/usage`);
+    }
+
+    listEnterpriseReview(enterpriseId) {
+      return this._json('GET', `/enterprises/${enterpriseId}/review`);
+    }
+
+    /** decision: approve | reject */
+    reviewEnterpriseImage(enterpriseId, imageId, decision, note) {
+      return this._json('POST', `/enterprises/${enterpriseId}/images/${imageId}/review`, {
+        json: { decision, note },
+      });
+    }
+
+    enterpriseRanking(enterpriseId) {
+      return this._json('GET', `/enterprises/${enterpriseId}/ranking`);
+    }
+
+    getEnterpriseNotice(enterpriseId) {
+      return this._json('GET', `/enterprises/${enterpriseId}/notice`);
+    }
+
+    setEnterpriseNotice(enterpriseId, text) {
+      return this._json('PUT', `/enterprises/${enterpriseId}/notice`, { json: { text } });
+    }
+
+    listEnterpriseLogs(enterpriseId) {
+      return this._json('GET', `/enterprises/${enterpriseId}/logs`);
+    }
+
+    enterpriseReport(enterpriseId, date) {
+      return this._json('GET', `/enterprises/${enterpriseId}/report`, { params: { date } });
+    }
+
+    enterpriseHeartbeat(enterpriseId, invisible) {
+      return this._json('POST', `/enterprises/${enterpriseId}/heartbeat`, { json: { invisible } });
+    }
+
     // ---- 通用底层（Vision Studio 本地扩展） ----
 
     /**

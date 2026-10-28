@@ -39,6 +39,7 @@ const backToImages = document.querySelector("#backToImages");
 const railUpload = document.querySelector("#railUpload");
 const railData = document.querySelector("#railData");
 const railTeam = document.querySelector("#railTeam");
+const railEnterprise = document.querySelector("#railEnterprise");
 const railProfile = document.querySelector("#railProfile");
 const backToUpload = document.querySelector("#backToUpload");
 const profileDialog = document.querySelector("#profileDialog");
@@ -122,6 +123,30 @@ VS.probe()
   .then(({ me }) => { if (me) setAccountBadge(me); })
   .catch(() => {});
 
+/* ---------------- 企业标识：Logo 右侧分隔栏 + 头像徽章 ---------------- */
+
+// 徽章本身是 CSS 画的（html.has-enterprise 时给头像右下角加 V），
+// 这里只负责「有没有企业身份」和分隔栏文案。
+const brandEnterprise = document.querySelector("#brandEnterprise");
+const brandEntName = document.querySelector("#brandEntName");
+const brandEntId = document.querySelector("#brandEntId");
+
+function setEnterpriseBrand(ent) {
+  const on = !!(ent && ent.name);
+  document.documentElement.classList.toggle("has-enterprise", on);
+  brandEnterprise.hidden = !on;
+  if (!on) {
+    brandEntName.textContent = "—";
+    brandEntId.textContent = "—";
+    return;
+  }
+  brandEntName.textContent = ent.name;
+  brandEntId.textContent = `ENT-${ent.id}`;
+  brandEnterprise.title = `${ent.name} · 企业 ID ENT-${ent.id}（${ent.my_role || "成员"}）`;
+}
+
+window.VSBrand = { setEnterprise: setEnterpriseBrand };
+
 appAccount.addEventListener("click", () => openDialog(profileDialog));
 setAccountBadge(null);
 
@@ -167,6 +192,7 @@ function syncRail() {
   railUpload.classList.toggle("is-active", currentView === "workspace");
   railData.classList.toggle("is-active", currentView === "images");
   railTeam.classList.toggle("is-active", currentView === "team");
+  railEnterprise.classList.toggle("is-active", currentView === "enterprise");
   railProfile.classList.toggle("is-active", !profileDialog.hidden);
   railSettings.classList.toggle("is-active", !settingsDialog.hidden);
 }
@@ -182,13 +208,16 @@ function showView(view) {
   document.querySelectorAll(".app-view").forEach((item) => {
     item.hidden = item.dataset.view !== view;
   });
-  // 小组页是三栏布局，需要比上传页更宽的画布
-  content.classList.toggle("is-wide", view === "team");
+  // 小组页与企业页都是多栏布局，需要比上传页更宽的画布
+  content.classList.toggle("is-wide", view === "team" || view === "enterprise");
   syncRail();
   if (view === "images") {
     loadImages({ force: false }).catch((error) => showStatus("暂时无法读取图像数据", error.message));
   }
   if (view === "team" && window.VSTeam) window.VSTeam.enter();
+  if (view === "enterprise" && window.VSTeamEnterprise) window.VSTeamEnterprise.enter();
+  // 离开企业页就停心跳，别在后台一直发请求
+  if (view !== "enterprise" && window.VSTeamEnterprise) window.VSTeamEnterprise.leave();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -203,6 +232,10 @@ railData.addEventListener("click", () => {
 railTeam.addEventListener("click", () => {
   clearTimeout(railExpandTimer);
   showView("team");
+});
+railEnterprise.addEventListener("click", () => {
+  clearTimeout(railExpandTimer);
+  showView("enterprise");
 });
 backToUpload.addEventListener("click", () => showView("workspace"));
 
@@ -1011,13 +1044,18 @@ async function openImageDetail(image, options = {}) {
   detailDimensions.textContent = `${image.width || "?"} × ${image.height || "?"}`;
   detailSize.textContent = formatSize(image.size_bytes);
   const hasAnalysis = analysisByImage.has(currentImageContext.analysisImageId);
-  detailAnalysis.textContent = currentImageContext.source === "team" && !hasAnalysis
-    ? "小组图片 · 尚未分析"
+  const source = currentImageContext.source;
+  detailAnalysis.textContent = (source === "team" || source === "enterprise") && !hasAnalysis
+    ? `${source === "team" ? "小组" : "企业"}图片 · 尚未分析`
     : analysisText(currentImageContext.analysisImageId);
-  sendToGroup.hidden = currentImageContext.source === "team";
+  sendToGroup.hidden = source !== "personal";
+  // 小组图与企业图没有本地标注数据，导出标注图没有意义
+  downloadAnnotated.hidden = source !== "personal";
   deleteImageButton.hidden = !currentImageContext.canDelete;
-  // 从小组成果点进来时，"返回"应该回小组，而不是回个人图像数据
-  backToImages.textContent = currentView === "team" ? "← 返回小组" : "← 返回图像数据";
+  // 从哪个栏目点进来，"返回"就回哪里
+  backToImages.textContent = source === "team" ? "← 返回小组"
+    : source === "enterprise" ? "← 返回企业空间"
+      : "← 返回图像数据";
   detailImage.removeAttribute("src");
   annotationOverlay.replaceChildren();
   content.hidden = true;
@@ -1152,6 +1190,102 @@ function showUploadToast(title, detail) {
   toastFadeTimer = window.setTimeout(hideUploadToast, 6000);
 }
 
+/* ---------------- 上传目标询问：同时在小组与企业里时才问 ---------------- */
+
+const uploadTargetDialog = document.querySelector("#uploadTargetDialog");
+const uploadTargetList = document.querySelector("#uploadTargetList");
+let targetPickResolve = null;
+
+function finishTargetPick(value) {
+  const resolve = targetPickResolve;
+  targetPickResolve = null;
+  closeDialog(uploadTargetDialog);
+  if (resolve) resolve(value);
+}
+
+document.querySelector("#closeUploadTarget").addEventListener("click", () => finishTargetPick(null));
+uploadTargetDialog.addEventListener("click", (event) => {
+  if (event.target === uploadTargetDialog) finishTargetPick(null);
+});
+
+function askUploadTarget(groups, enterprises) {
+  uploadTargetList.replaceChildren();
+  const team = groups[0];
+  const ent = enterprises[0];
+  const options = [
+    { id: "personal", icon: "person", title: "个人工作台", note: "上传后立即启动模型分析，结果在图像数据里" },
+    {
+      id: "team", icon: "groups", title: team.name,
+      note: groups.length > 1 ? `小组空间 · 共 ${groups.length} 个小组，可在小组页切换` : "小组空间 · 归档到小组成果",
+    },
+    {
+      id: "enterprise", icon: "corporate_fare", title: ent.name,
+      note: ent.my_role === "member" ? "企业空间 · 上传后需要管理员审核" : "企业空间 · 直接进入企业图库",
+    },
+  ];
+
+  options.forEach((option) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "target-pick";
+    button.dataset.target = option.id;
+    const icon = document.createElement("span");
+    icon.className = "material-symbols-rounded";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = option.icon;
+    const copy = document.createElement("span");
+    copy.className = "target-pick-copy";
+    const strong = document.createElement("strong");
+    strong.textContent = option.title;
+    const small = document.createElement("small");
+    small.textContent = option.note;
+    copy.append(strong, small);
+    const go = document.createElement("span");
+    go.className = "material-symbols-rounded target-pick-go";
+    go.setAttribute("aria-hidden", "true");
+    go.textContent = "arrow_forward";
+    button.append(icon, copy, go);
+    button.addEventListener("click", () => finishTargetPick(option.id));
+    uploadTargetList.append(button);
+  });
+
+  openDialog(uploadTargetDialog);
+  return new Promise((resolve) => { targetPickResolve = resolve; });
+}
+
+// 直接写进小组 / 企业图库，不经过个人项目，也不建分析任务
+async function sendFilesTo(files, destination, groups, enterprises) {
+  const toTeam = destination === "team";
+  const label = toTeam ? "小组" : "企业";
+  confirmAnalysis.disabled = true;
+  confirmAnalysis.textContent = "正在上传…";
+  uploadFeedback.textContent = `正在导入 ${files.length} 个文件到${label}…`;
+  let count = 0;
+  try {
+    for (let start = 0; start < files.length; start += API_BATCH_FILES) {
+      const batch = files.slice(start, start + API_BATCH_FILES);
+      const out = toTeam
+        ? await call(() => sdk.uploadGroupImages(groups[0].id, batch))
+        : await call(() => sdk.uploadEnterpriseImages(enterprises[0].id, batch));
+      count += (out || []).length;
+    }
+    selectedFiles = [];
+    renderSelection();
+    uploadFeedback.textContent = `已导入 ${count} 张到${label}`;
+    showUploadToast(
+      `已上传 ${count} 张到${label}`,
+      toTeam ? "在小组空间可以看到这批图" : "成员上传的图片会先进审核队列"
+    );
+    if (toTeam) window.VSTeam?.refreshResults();
+    else window.VSTeamEnterprise?.refresh();
+  } catch (error) {
+    uploadFeedback.textContent = error.message;
+  } finally {
+    confirmAnalysis.disabled = false;
+    confirmAnalysis.innerHTML = "确认并开始分析 <span>→</span>";
+  }
+}
+
 confirmAnalysis.addEventListener("click", async () => {
   const files = [...selectedFiles];
   if (!files.length) return;
@@ -1166,6 +1300,28 @@ confirmAnalysis.addEventListener("click", async () => {
     uploadFeedback.textContent = "当前后端暂未提供 ZIP 解压接口，请先解压后选择其中的图片";
     return;
   }
+
+  // 同时在小组与企业里时，先问这批图归哪 —— 不同目标走完全不同的链路，
+  // 猜错会让图片落到错误的空间，所以宁可多问一次。
+  let groups = [];
+  let enterprises = [];
+  try {
+    [groups, enterprises] = await Promise.all([
+      sdk.listGroups().catch(() => []),
+      sdk.listEnterprises().catch(() => []),
+    ]);
+  } catch {
+    /* 探测失败就走默认的个人工作台，不打断主流程 */
+  }
+  if ((groups || []).length && (enterprises || []).length) {
+    const destination = await askUploadTarget(groups, enterprises);
+    if (!destination) return;
+    if (destination !== "personal") {
+      await sendFilesTo(files, destination, groups, enterprises);
+      return;
+    }
+  }
+
   confirmAnalysis.disabled = true;
   confirmAnalysis.textContent = "正在上传…";
   uploadFeedback.textContent = `正在导入 ${files.length} 个已确认文件…`;
@@ -1321,3 +1477,11 @@ showView("workspace");
 loadImages().catch((error) => {
   showStatus("暂时无法连接后端", error.message);
 });
+
+// 有企业身份就点亮 Logo 旁的分隔栏与头像徽章。纯装饰，失败静默。
+sdk
+  .listEnterprises()
+  .then((rows) => {
+    if (rows && rows.length) setEnterpriseBrand(rows[0]);
+  })
+  .catch(() => {});

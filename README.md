@@ -60,12 +60,12 @@ python -m http.server 8125 --bind 127.0.0.1
 
 | 用途 | 接口 | 字段 |
 |---|---|---|
-| 小组聊天（读） | `GET /groups/{id}/messages?after_id=&limit=` | 每条至少 `id`、`group_id`、`account_id`、`content`、`created_at`，可附 `account` |
-| 小组聊天（写） | `POST /groups/{id}/messages` | body `{ "content": "..." }` |
-| 小组介绍 | `Group` 增加可写 `description` | 字符串 |
 | 展示名称（可选） | `Account` 增加 `display_name` | 字符串 |
+| 小组介绍（可选） | `Group` 增加可写 `description` | 字符串。前端已不展示，补了也不会用到 |
 
-聊天现在是「接口缺失 → 输入框禁用 + 说明文案」，没有用 localStorage 造假数据。补上接口后前端会自动启用。
+小组聊天已经从前端**整块删除**（后端一直没有消息接口，占位反而造成「功能好像坏了」的观感），不用再补。
+
+企业空间的接口见下面第 7 条，那是一整套新契约。
 
 ### 4. 两个字段名不一致，别踩
 
@@ -84,3 +84,41 @@ python -m http.server 8125 --bind 127.0.0.1
 
 前端按 **id 取最大** 当作最新任务，不依赖数组顺序。如果后端改了排序，前端不会受影响；但请不要改成「id 小的在前」以外还省略 id。
 
+
+---
+
+### 7. 企业空间：一整套新接口（前端已完成，后端未实现）
+
+前端已经做完，**后端只要照下面实现，界面零改动就能通**。没实现时前端不会报错：企业页显示「当前后端还没有企业接口」，创建/加入按钮自动禁用，Logo 旁的企业栏不出现。
+
+**角色**：`owner`（所有者）> `admin`（管理员）> `reviewer`（审核员）> `member`（成员）> `guest`（只读访客）
+
+| 用途 | 接口 | 说明 |
+|---|---|---|
+| 我的企业 | `GET /enterprises` | 数组，每项在 `Enterprise` 基础上附 `my_role`、`member_count`、`image_count`、`used_bytes`、`review_pending`、`pending_count` |
+| 创建 | `POST /enterprises` | body `{name, email}`；邮箱域名不得是免费邮箱；返回带 `code` 的企业对象 |
+| 详情 / 改 / 解散 | `GET｜PATCH｜DELETE /enterprises/{id}` | 解散仅 owner |
+| 凭码申请 | `POST /enterprises/join` | body `{code, message}`；返回 `{status: "pending"｜"active", enterprise}` |
+| 待审申请 | `GET /enterprises/{id}/requests` | 数组 `{account_id, account, message, applied_at}` |
+| 审批 | `POST /enterprises/{id}/requests/{accountId}/approve` · `.../reject` | admin 及以上 |
+| 成员 | `GET｜POST /enterprises/{id}/members` | GET 每项附 `online`、`invisible`、`upload_count`；POST body `{username, role}` 为邀请 |
+| 改角色 / 移除 | `PATCH｜DELETE /enterprises/{id}/members/{accountId}` | PATCH 只传 `{invisible}` 表示本人改隐身 |
+| 退出 | `POST /enterprises/{id}/leave` | owner 不能退出（409） |
+| 图库 | `GET｜POST /enterprises/{id}/images` | POST 用 **`files`（复数）**，返回数组 |
+| 删图 | `DELETE /enterprises/{id}/images/{imageId}` | 管理员以上或本人 |
+| 用量 | `GET /enterprises/{id}/usage` | `{image_count, used_bytes, quota_images, member_count, quota_members}` |
+| 待审列表 | `GET /enterprises/{id}/review` | 图库里 `review_status === "pending"` 的那些 |
+| 审批图片 | `POST /enterprises/{id}/images/{imageId}/review` | body `{decision: "approve"｜"reject", note}`，reviewer 及以上 |
+| 上传排名 | `GET /enterprises/{id}/ranking` | 数组 `{account_id, username, role, count, rank}`，按 count 降序 |
+| 公告 | `GET｜PUT /enterprises/{id}/notice` | body `{text}`，admin 及以上 |
+| 操作留痕 | `GET /enterprises/{id}/logs` | 数组 `{id, actor_account_id, actor_name, action, detail, created_at}`，新在前 |
+| 日报 | `GET /enterprises/{id}/report?date=YYYY-MM-DD` | `{date, uploads, approved, rejected, pending, pass_rate, active_members, by_member[]}` |
+| 心跳 | `POST /enterprises/{id}/heartbeat` | body `{invisible}`；返回 `{online, invisible, server_time}` |
+
+**三条实现约定**：
+
+1. **在线状态不由数据库存**，按 `last_seen_at` 算：45 秒内有心跳且没开隐身即为在线。前端每 20 秒打一次心跳。
+2. **图片审核**：`EnterpriseImage.review_status` 取值 `pending` / `approved` / `rejected`。若企业开了 `auto_approve_staff`，管理员及以上上传的直接 `approved`。
+3. **配额超限返回 409**，detail 里带已用量，前端直接显示这句话。
+
+**图片内容复用现有端点**：`GET /images/{imageId}/content` 要能取到企业图，否则企业图库全是空白格子。

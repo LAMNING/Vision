@@ -34,6 +34,10 @@
           <span class="material-symbols-rounded" aria-hidden="true">groups</span>
           <span class="rail-label">小组空间</span>
         </button>
+        <button id="railEnterprise" type="button" aria-label="企业空间">
+          <span class="material-symbols-rounded" aria-hidden="true">corporate_fare</span>
+          <span class="rail-label">企业空间</span>
+        </button>
         <span class="rail-divider" aria-hidden="true"></span>
         <button id="railSettings" type="button" aria-label="设置">
           <span class="material-symbols-rounded" aria-hidden="true">settings</span>
@@ -64,6 +68,11 @@
           <div class="app-brand">
             <span class="app-mark" aria-hidden="true">V</span>
             <span class="app-brand-name">Vision Studio</span>
+            <span class="app-brand-ent" id="brandEnterprise" hidden>
+              <i aria-hidden="true"></i>
+              <strong id="brandEntName">—</strong>
+              <small id="brandEntId">—</small>
+            </span>
           </div>
           <button class="app-account" id="appAccount" type="button" aria-label="打开个人与账号">
             <span class="app-avatar" id="appAvatar" aria-hidden="true">·</span>
@@ -190,6 +199,98 @@
               <strong>还没有加入小组</strong>
               <p>创建一个小组，把个人图片汇总成小组成果，也让成员看到彼此的进度。</p>
               <button class="primary-button" id="createFirstTeam" type="button">创建小组</button>
+            </div>
+          </section>
+
+          <!-- 企业空间：与企业自有权限模型，左栏信息 + 配额 + 公告 + 成员，右栏图库 / 审核 / 记录 / 日报 -->
+          <section class="app-view team-view enterprise-view" data-view="enterprise" hidden>
+            <header class="team-head">
+              <div>
+                <p class="section-kicker">ENTERPRISE SPACE</p>
+                <h1>企业空间</h1>
+              </div>
+              <div class="team-switch">
+                <span class="ent-id-chip" id="entIdChip" hidden>—</span>
+                <select id="enterpriseSelect" aria-label="切换企业"><option value="">加载中…</option></select>
+                <button class="secondary-button" id="newEnterpriseButton" type="button">创建企业</button>
+              </div>
+            </header>
+
+            <div class="team-grid" id="enterpriseGrid" hidden>
+              <div class="team-col">
+                <article class="panel team-card-info">
+                  <div class="team-info-head">
+                    <span class="team-badge ent-badge" id="entBadge" aria-hidden="true">企</span>
+                    <div class="team-info-title">
+                      <h2 id="entNameText">—</h2>
+                      <p id="entMeta">—</p>
+                    </div>
+                    <button class="icon-button" id="entSettingsButton" type="button" aria-label="企业设置" title="企业设置">
+                      <span class="material-symbols-rounded" aria-hidden="true">settings</span>
+                    </button>
+                  </div>
+
+                  <div class="ent-quota">
+                    <div class="ent-quota-head"><span>图片配额</span><b id="entQuotaText">0 / 0</b></div>
+                    <div class="ent-quota-track"><i id="entQuotaFill"></i></div>
+                    <div class="ent-quota-foot"><span id="entQuotaStorage">—</span><span id="entQuotaMembers">—</span></div>
+                  </div>
+
+                  <div class="ent-notice" id="entNotice" hidden>
+                    <span class="material-symbols-rounded" aria-hidden="true">campaign</span>
+                    <div><small>企业公告</small><p id="entNoticeText"></p></div>
+                  </div>
+
+                  <div class="ent-presence">
+                    <span class="presence-dot" id="entPresenceDot"></span>
+                    <span id="entPresenceText">读取状态…</span>
+                    <label class="ent-invisible"><input type="checkbox" id="entInvisible" /><span>隐身</span></label>
+                  </div>
+
+                  <div class="team-members-block">
+                    <div class="block-head">
+                      <span>成员 <b id="entMemberCount">0</b></span>
+                      <button class="text-button" id="entManageMembers" type="button" hidden>管理</button>
+                    </div>
+                    <ul class="member-list" id="entMemberList"></ul>
+                    <p class="member-hint">绿点表示在线 · 点成员只看他上传的图片</p>
+                  </div>
+                </article>
+              </div>
+
+              <article class="panel team-card-results">
+                <div class="panel-head">
+                  <div>
+                    <h3 id="entPaneTitle">企业图库</h3>
+                    <p class="panel-sub" id="entResultsMeta">—</p>
+                  </div>
+                  <button class="secondary-button" id="entUploadButton" type="button">上传图片</button>
+                  <input id="entUploadInput" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden />
+                </div>
+
+                <div class="ent-tabs" role="tablist" aria-label="企业空间视图">
+                  <button class="ent-tab is-active" type="button" role="tab" aria-selected="true" data-ent-tab="gallery">成果</button>
+                  <button class="ent-tab" type="button" role="tab" aria-selected="false" data-ent-tab="review">待审核 <b id="entReviewBadge" hidden>0</b></button>
+                  <button class="ent-tab" type="button" role="tab" aria-selected="false" data-ent-tab="logs">操作记录</button>
+                  <button class="ent-tab" type="button" role="tab" aria-selected="false" data-ent-tab="report">日报</button>
+                </div>
+
+                <div class="result-filter" id="entFilter" hidden></div>
+                <div class="team-results" id="entResults"></div>
+                <div class="ent-pane" id="entReviewPane" hidden></div>
+                <div class="ent-pane" id="entLogPane" hidden></div>
+                <div class="ent-pane" id="entReportPane" hidden></div>
+              </article>
+            </div>
+
+            <div class="team-empty" id="enterpriseEmpty" hidden>
+              <span class="material-symbols-rounded" aria-hidden="true">corporate_fare</span>
+              <strong>还没有加入企业</strong>
+              <p>创建一个企业，或用企业码申请加入。企业空间支持权限分级、上传审核与成员排名。</p>
+              <div class="ent-empty-actions">
+                <button class="primary-button" id="createFirstEnterprise" type="button">创建企业</button>
+                <button class="secondary-button" id="joinFirstEnterprise" type="button">用企业码加入</button>
+              </div>
             </div>
           </section>
         </div>
@@ -348,6 +449,141 @@
       </section>
     </div>
 
+    <!-- 同时属于小组和企业时，上传前先问目标 -->
+    <div class="dialog-backdrop" id="uploadTargetDialog" hidden>
+      <section class="dialog settings-dialog target-pick-dialog" role="dialog" aria-modal="true" aria-labelledby="uploadTargetTitle">
+        <button class="dialog-close" id="closeUploadTarget" type="button" aria-label="关闭">×</button>
+        <p class="section-kicker">UPLOAD TO</p>
+        <h2 id="uploadTargetTitle">这批图片传到哪里？</h2>
+        <p class="dialog-description">你同时在小组和企业里，先选一个目标。个人工作台会立即启动模型分析，小组与企业只做归档。</p>
+        <div class="target-pick-list" id="uploadTargetList"></div>
+      </section>
+    </div>
+
+    <!-- 创建企业 -->
+    <div class="dialog-backdrop" id="enterpriseDialog" hidden>
+      <section class="dialog settings-dialog" role="dialog" aria-modal="true" aria-labelledby="enterpriseDialogTitle">
+        <button class="dialog-close" id="closeEnterpriseDialog" type="button" aria-label="关闭">×</button>
+        <p class="section-kicker">NEW ENTERPRISE</p>
+        <h2 id="enterpriseDialogTitle">创建企业</h2>
+        <p class="dialog-description">创建后你会成为企业所有者，并拿到一个专属企业码，其他人凭码申请加入。</p>
+        <form id="enterpriseForm" class="settings-form">
+          <label for="enterpriseName">企业名称</label>
+          <input id="enterpriseName" type="text" maxlength="40" placeholder="例如：星海视觉实验室" />
+          <label for="enterpriseEmail">企业邮箱</label>
+          <input id="enterpriseEmail" type="email" maxlength="120" placeholder="name@yourcompany.com" />
+          <p class="settings-help">用于企业身份识别，需为企业域名邮箱（不接受 QQ / 163 等个人邮箱）。</p>
+          <div class="settings-actions">
+            <p id="enterpriseStatus" class="settings-status" role="status"></p>
+            <button class="primary-button" id="saveEnterpriseButton" type="submit">创建并进入</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <!-- 用企业码加入 -->
+    <div class="dialog-backdrop" id="enterpriseJoinDialog" hidden>
+      <section class="dialog settings-dialog" role="dialog" aria-modal="true" aria-labelledby="enterpriseJoinTitle">
+        <button class="dialog-close" id="closeEnterpriseJoin" type="button" aria-label="关闭">×</button>
+        <p class="section-kicker">JOIN WITH CODE</p>
+        <h2 id="enterpriseJoinTitle">用企业码加入</h2>
+        <p class="dialog-description">输入 8 位企业码，申请会送到企业管理员那里，审批通过后即可进入企业空间。</p>
+        <form id="enterpriseJoinForm" class="settings-form">
+          <label for="enterpriseCode">企业码</label>
+          <input id="enterpriseCode" type="text" maxlength="16" placeholder="VS-XXXXXXXX" autocomplete="off" spellcheck="false" />
+          <label for="enterpriseMessage">申请留言 <span class="optional">可选</span></label>
+          <input id="enterpriseMessage" type="text" maxlength="200" placeholder="简单说明你是谁、负责什么" />
+          <div class="settings-actions">
+            <p id="enterpriseJoinStatus" class="settings-status" role="status"></p>
+            <button class="primary-button" id="saveEnterpriseJoin" type="submit">提交申请</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <!-- 企业设置：企业码 / 邀请 / 申请审批 / 配额 / 公告 / 危险操作 -->
+    <div class="dialog-backdrop" id="enterpriseSettingsDialog" hidden>
+      <section class="dialog settings-dialog ent-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="entSettingsTitle">
+        <button class="dialog-close" id="closeEnterpriseSettings" type="button" aria-label="关闭">×</button>
+        <p class="section-kicker">ENTERPRISE SETTINGS</p>
+        <h2 id="entSettingsTitle">企业设置</h2>
+
+        <section class="ent-settings-block">
+          <h3>企业码</h3>
+          <p class="settings-help">把它发给同事，他们在「企业空间 → 用企业码加入」里输入即可提交申请。</p>
+          <div class="ent-code-row">
+            <code id="entCodeValue">—</code>
+            <button class="secondary-button" id="copyEntCode" type="button">复制</button>
+          </div>
+        </section>
+
+        <form id="entInviteForm" class="settings-form ent-settings-block">
+          <h3>邀请成员</h3>
+          <p class="settings-help">直接输入用户名邀请，对方无需审批即可进入。</p>
+          <div class="ent-invite-row">
+            <input id="entInviteName" type="text" maxlength="40" placeholder="用户名" autocomplete="off" />
+            <select id="entInviteRole" aria-label="邀请角色">
+              <option value="member">成员</option>
+              <option value="reviewer">审核员</option>
+              <option value="admin">管理员</option>
+              <option value="guest">只读访客</option>
+            </select>
+            <button class="secondary-button" id="saveEntInvite" type="submit">邀请</button>
+          </div>
+          <p id="entInviteStatus" class="settings-status" role="status"></p>
+        </form>
+
+        <section class="ent-settings-block" id="entRequestsBlock" hidden>
+          <h3>待审批申请 <b id="entRequestCount">0</b></h3>
+          <div class="ent-request-list" id="entRequestList"></div>
+        </section>
+
+        <form id="entQuotaForm" class="settings-form ent-settings-block">
+          <h3>配额与加入方式</h3>
+          <div class="ent-field-grid">
+            <label for="entQuotaImages">图片配额<span><input id="entQuotaImages" type="number" min="1" max="100000" /></span></label>
+            <label for="entQuotaMembersInput">成员上限<span><input id="entQuotaMembersInput" type="number" min="1" max="10000" /></span></label>
+          </div>
+          <label class="ent-check"><input type="checkbox" id="entAutoApprove" /><span>管理员上传的图片直接入库，无需审核</span></label>
+          <label class="ent-check"><input type="checkbox" id="entOpenJoin" /><span>允许凭企业码直接加入（关闭则需审批）</span></label>
+          <div class="settings-actions">
+            <p id="entQuotaStatus" class="settings-status" role="status"></p>
+            <button class="secondary-button" id="saveEntQuota" type="submit">保存设置</button>
+          </div>
+        </form>
+
+        <form id="entNoticeForm" class="settings-form ent-settings-block">
+          <h3>企业公告</h3>
+          <textarea id="entNoticeInput" maxlength="300" rows="3" placeholder="发一条置顶通知，所有成员都能在企业空间看到"></textarea>
+          <div class="settings-actions">
+            <p id="entNoticeStatus" class="settings-status" role="status"></p>
+            <button class="secondary-button" id="saveEntNotice" type="submit">发布公告</button>
+          </div>
+        </form>
+
+        <section class="ent-settings-block ent-danger-block">
+          <h3>离开企业</h3>
+          <p class="settings-help" id="entDangerHint">退出后，你上传的图片会留在企业空间。</p>
+          <div class="ent-danger-actions">
+            <button class="secondary-button" id="entLeaveButton" type="button">退出企业</button>
+            <button class="text-button is-danger" id="entDissolveButton" type="button" hidden>解散企业</button>
+          </div>
+        </section>
+      </section>
+    </div>
+
+    <!-- 成员管理：改角色 / 移除 -->
+    <div class="dialog-backdrop" id="entMembersDialog" hidden>
+      <section class="dialog settings-dialog" role="dialog" aria-modal="true" aria-labelledby="entMembersTitle">
+        <button class="dialog-close" id="closeEntMembers" type="button" aria-label="关闭">×</button>
+        <p class="section-kicker">MEMBERS</p>
+        <h2 id="entMembersTitle">成员管理</h2>
+        <p class="dialog-description">角色越高权限越大：所有者 &gt; 管理员 &gt; 审核员 &gt; 成员 &gt; 只读访客。</p>
+        <div class="ent-member-manage" id="entMemberManage"></div>
+        <p id="entMemberStatus" class="settings-status" role="status"></p>
+      </section>
+    </div>
+
     <!-- 统一危险操作确认：替代浏览器系统 confirm -->
     <div class="dialog-backdrop danger-backdrop" id="dangerDialog" hidden>
       <section class="dialog danger-dialog" role="alertdialog" aria-modal="true" aria-labelledby="dangerTitle" aria-describedby="dangerMessage">
@@ -368,5 +604,6 @@
     <script src="app.js"></script>
     <script src="settings.js"></script>
     <script src="team.js"></script>
+    <script src="enterprise.js"></script>
   </body>
 </html>
