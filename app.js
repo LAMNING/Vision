@@ -66,6 +66,15 @@ const confirmLogout = document.querySelector("#confirmLogout");
 const appAccount = document.querySelector("#appAccount");
 const appAvatar = document.querySelector("#appAvatar");
 const appAccountName = document.querySelector("#appAccountName");
+const railSettings = document.querySelector("#railSettings");
+const settingsDialog = document.querySelector("#settingsDialog");
+const closeSettingsDialog = document.querySelector("#closeSettingsDialog");
+
+const imageToolbar = document.querySelector("#imageToolbar");
+const selectAllImages = document.querySelector("#selectAllImages");
+const selectionCount = document.querySelector("#selectionCount");
+const downloadSelected = document.querySelector("#downloadSelected");
+const downloadAnnotated = document.querySelector("#downloadAnnotated");
 
 const allDialogs = [...document.querySelectorAll(".dialog-backdrop")];
 
@@ -159,6 +168,7 @@ function syncRail() {
   railData.classList.toggle("is-active", currentView === "images");
   railTeam.classList.toggle("is-active", currentView === "team");
   railProfile.classList.toggle("is-active", !profileDialog.hidden);
+  railSettings.classList.toggle("is-active", !settingsDialog.hidden);
 }
 
 function showView(view) {
@@ -286,6 +296,8 @@ function toggleDialog(dialog) {
 
 railProfile.addEventListener("click", () => toggleDialog(profileDialog));
 closeProfileDialog.addEventListener("click", () => closeDialog(profileDialog));
+railSettings.addEventListener("click", () => toggleDialog(settingsDialog));
+closeSettingsDialog.addEventListener("click", () => closeDialog(settingsDialog));
 openTargetSettings.addEventListener("click", () => {
   openDialog(targetSettingsDialog);
   loadProjectTargets({ forEditor: true });
@@ -419,8 +431,13 @@ function renderImages(images) {
   loadedImages = images;
   thumbnailUrls.forEach((url) => URL.revokeObjectURL(url));
   thumbnailUrls = [];
+  // 删掉图片后勾选里可能还留着已经不存在的 id，先清一遍
+  [...pickedImages].forEach((id) => {
+    if (!images.some((image) => Number(image.id) === Number(id))) pickedImages.delete(id);
+  });
   if (!images.length) {
     showStatus("还没有图像数据", "上传第一张图片，开始分析与标注。");
+    syncImageToolbar();
     return;
   }
 
@@ -431,22 +448,233 @@ function renderImages(images) {
   list.className = "image-list";
   // 后端按上传顺序返回，列表倒序显示最新的在最上面
   images.slice().reverse().forEach((image) => {
-    const row = document.createElement("button");
-    row.type = "button";
+    // 行本身是 role=button，不再用 <button> 包着：按钮里不能再嵌 checkbox
+    const row = document.createElement("div");
     row.className = "image-row";
     row.dataset.imageId = String(image.id);
     row.style.setProperty("--row-index", list.children.length);
-    row.innerHTML = "<img class=\"image-thumb\" alt=\"\" /><span class=\"image-copy\"><strong></strong><small></small></span>";
+    row.tabIndex = 0;
+    row.setAttribute("role", "button");
+    row.setAttribute("aria-label", `打开 ${image.filename}`);
+    row.innerHTML = "<label class=\"image-pick\"><input type=\"checkbox\" aria-label=\"勾选这张图片\" /><span></span></label>"
+      + "<img class=\"image-thumb\" alt=\"\" /><span class=\"image-copy\"><strong></strong><small></small></span>";
     row.querySelector("strong").textContent = image.filename;
     const meta = row.querySelector("small");
     meta.dataset.base = `${image.width || "?"} × ${image.height || "?"} · ${formatSize(image.size_bytes)}`;
     meta.textContent = `${meta.dataset.base} · ${analysisText(image.id)}`;
     row.addEventListener("click", () => openImageDetail(image));
+    row.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openImageDetail(image);
+    });
+
+    const pick = row.querySelector(".image-pick");
+    const input = pick.querySelector("input");
+    input.checked = pickedImages.has(String(image.id));
+    // 勾选只改变选择状态，不该顺带把详情页打开
+    pick.addEventListener("click", (event) => event.stopPropagation());
+    pick.addEventListener("keydown", (event) => event.stopPropagation());
+    input.addEventListener("change", () => {
+      if (input.checked) pickedImages.add(String(image.id));
+      else pickedImages.delete(String(image.id));
+      row.classList.toggle("is-picked", input.checked);
+      syncImageToolbar();
+    });
+    row.classList.toggle("is-picked", input.checked);
+
     list.append(row);
     loadThumbnail(image, row.querySelector(".image-thumb"));
   });
   imageDataState.replaceChildren(list);
+  syncImageToolbar();
 }
+
+/* ---------------- 勾选与批量下载 ---------------- */
+
+const pickedImages = new Set();
+
+function pickedList() {
+  return loadedImages.filter((image) => pickedImages.has(String(image.id)));
+}
+
+function syncImageToolbar() {
+  const total = loadedImages.length;
+  imageToolbar.hidden = total === 0;
+  const picked = pickedList();
+  const annotated = picked.filter((image) => annotationItems(image.id).length).length;
+  selectionCount.textContent = picked.length
+    ? `已选 ${picked.length} 张${annotated ? ` · 其中 ${annotated} 张有标注` : ""}`
+    : "还没有选中图片";
+  downloadSelected.disabled = picked.length === 0;
+  selectAllImages.checked = total > 0 && picked.length === total;
+  selectAllImages.indeterminate = picked.length > 0 && picked.length < total;
+}
+
+selectAllImages.addEventListener("change", () => {
+  pickedImages.clear();
+  if (selectAllImages.checked) loadedImages.forEach((image) => pickedImages.add(String(image.id)));
+  document.querySelectorAll(".image-row[data-image-id]").forEach((row) => {
+    const on = pickedImages.has(String(row.dataset.imageId));
+    row.classList.toggle("is-picked", on);
+    const input = row.querySelector(".image-pick input");
+    if (input) input.checked = on;
+  });
+  syncImageToolbar();
+});
+
+/* ---------------- 标注图导出 ---------------- */
+
+function annotationItems(imageId) {
+  const state = analysisByImage.get(Number(imageId));
+  return state?.kind === "result" ? (state.items || []) : [];
+}
+
+// 把原图和标注框一起画进 canvas，导出成 PNG。
+// 坐标就是原图像素坐标（overlay 的 viewBox 用的也是同一套），不需要缩放换算。
+function drawAnnotated(source, items) {
+  const canvas = document.createElement("canvas");
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(source.node, 0, 0, source.width, source.height);
+
+  const unit = Math.min(source.width, source.height);
+  const lineWidth = Math.max(2, Math.round(unit * 0.0035));
+  const fontSize = Math.max(14, Math.round(unit * 0.026));
+
+  items.forEach((item) => {
+    const box = item.payload?.box;
+    if (!Array.isArray(box) || box.length !== 4) return;
+    const [x1, y1, x2, y2] = box.map(Number);
+    if (![x1, y1, x2, y2].every(Number.isFinite) || x2 <= x1 || y2 <= y1) return;
+
+    ctx.fillStyle = "rgba(0, 113, 227, .07)";
+    ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+    ctx.strokeStyle = "#0071e3";
+    ctx.lineWidth = lineWidth;
+    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+    const confidence = item.confidence == null ? "" : ` ${Math.round(item.confidence * 100)}%`;
+    const text = `${item.label || "目标"}${confidence}`;
+    ctx.font = `650 ${fontSize}px "PingFang SC", "Microsoft YaHei", system-ui, sans-serif`;
+    ctx.textBaseline = "alphabetic";
+    // canvas 没有 paint-order，先描一遍深色再填白，效果和网页里的标签一致
+    ctx.lineJoin = "round";
+    ctx.lineWidth = Math.max(3, Math.round(fontSize * 0.34));
+    ctx.strokeStyle = "rgba(0, 70, 145, .92)";
+    const textX = Math.max(6, x1 + 4);
+    const textY = Math.max(fontSize + 4, y1 - 6);
+    ctx.strokeText(text, textX, textY);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(text, textX, textY);
+  });
+  return canvas;
+}
+
+// 用 <img> 解码而不是 createImageBitmap：兼容性更好，
+// 而且不会在部分无头环境下卡在解码那一步（本项目踩过）。
+function decodeBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const node = new Image();
+    node.onload = () => resolve({
+      node,
+      width: node.naturalWidth,
+      height: node.naturalHeight,
+      release: () => URL.revokeObjectURL(url),
+    });
+    node.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("这张图片无法解码"));
+    };
+    node.src = url;
+  });
+}
+
+async function annotatedBlob(image, analysisImageId) {
+  const { blob } = await call(() => sdk.imageContent(image.id));
+  const source = await decodeBlob(blob);
+  try {
+    const items = annotationItems(analysisImageId || image.id);
+    const canvas = drawAnnotated(source, items);
+    const png = await new Promise((resolve, reject) => {
+      canvas.toBlob((result) => (result ? resolve(result) : reject(new Error("导出失败"))), "image/png");
+    });
+    return { png, annotated: items.length > 0 };
+  } finally {
+    source.release();
+  }
+}
+
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  // 立刻 revoke 会让部分浏览器的下载中断，留一点余量
+  window.setTimeout(() => URL.revokeObjectURL(url), 20000);
+}
+
+function exportName(image, annotated) {
+  const base = String(image.filename || `image-${image.id}`).replace(/\.[^.]+$/, "") || `image-${image.id}`;
+  return `${base}-${annotated ? "标注" : "原图"}.png`;
+}
+
+async function exportOne(image, analysisImageId) {
+  const { png, annotated } = await annotatedBlob(image, analysisImageId);
+  saveBlob(png, exportName(image, annotated));
+  return annotated;
+}
+
+downloadAnnotated.addEventListener("click", async () => {
+  if (!currentImage) return;
+  const label = downloadAnnotated.textContent;
+  downloadAnnotated.disabled = true;
+  downloadAnnotated.textContent = "正在生成…";
+  try {
+    const annotated = await exportOne(currentImage, currentImageContext.analysisImageId);
+    showUploadToast("已保存标注图", annotated ? "标注框已画在图上" : "这张图还没有标注，导出的是原图");
+  } catch (error) {
+    showUploadToast("导出没有完成", error.message || "请稍后重试");
+  } finally {
+    downloadAnnotated.disabled = false;
+    downloadAnnotated.textContent = label;
+  }
+});
+
+downloadSelected.addEventListener("click", async () => {
+  const list = pickedList();
+  if (!list.length) return;
+  const label = downloadSelected.textContent;
+  downloadSelected.disabled = true;
+  let done = 0;
+  let failed = 0;
+  try {
+    for (const image of list) {
+      downloadSelected.textContent = `正在导出 ${done + failed + 1}/${list.length}…`;
+      try {
+        await exportOne(image);
+        done += 1;
+      } catch {
+        failed += 1;
+      }
+      // 连续触发下载浏览器会要求"允许多个文件"，留出间隔更像人点的
+      if (done + failed < list.length) await new Promise((resolve) => window.setTimeout(resolve, 420));
+    }
+    showUploadToast(
+      `已导出 ${done} 张标注图`,
+      failed ? `${failed} 张失败，请稍后重试` : "文件已保存到浏览器的下载目录",
+    );
+  } finally {
+    downloadSelected.disabled = false;
+    downloadSelected.textContent = label;
+    syncImageToolbar();
+  }
+});
 
 async function loadThumbnail(image, target) {
   try {

@@ -35,6 +35,10 @@
           <span class="rail-label">小组空间</span>
         </button>
         <span class="rail-divider" aria-hidden="true"></span>
+        <button id="railSettings" type="button" aria-label="设置">
+          <span class="material-symbols-rounded" aria-hidden="true">settings</span>
+          <span class="rail-label">设置</span>
+        </button>
 
         <!-- 退出：点击后从分隔线处分裂成独立小卡片，取消则收缩粘回 -->
         <span class="logout-slot">
@@ -64,9 +68,6 @@
           <button class="app-account" id="appAccount" type="button" aria-label="打开个人与账号">
             <span class="app-avatar" id="appAvatar" aria-hidden="true">·</span>
             <span class="app-account-copy"><strong id="appAccountName">参赛成员</strong><small>个人与账号</small></span>
-          </button>
-          <button class="theme-quick-button" id="themeQuickButton" type="button" aria-label="打开外观与主题">
-            <span class="material-symbols-rounded" aria-hidden="true">palette</span>
           </button>
         </header>
 
@@ -123,6 +124,11 @@
               <p>已导入的图片与后续分析结果都在这里管理。</p>
               <button class="secondary-button" id="backToUpload" type="button">继续上传</button>
             </section>
+            <div class="image-toolbar" id="imageToolbar" hidden>
+              <label class="toolbar-select"><input type="checkbox" id="selectAllImages" /><span>全选</span></label>
+              <span class="toolbar-count" id="selectionCount">还没有选中图片</span>
+              <button class="secondary-button" id="downloadSelected" type="button" disabled>下载标注图</button>
+            </div>
             <section class="section"><div class="empty-state" id="imageDataState"><strong>还没有图像数据</strong><p>回到上传页，选择图片后确认分析。</p></div></section>
           </section>
 
@@ -141,6 +147,7 @@
             </header>
 
             <div class="team-grid" id="teamGrid" hidden>
+              <!-- 左半边：全部是小组自身的信息，成员按行列出并显示各自上传数 -->
               <div class="team-col">
                 <article class="panel team-card-info">
                   <div class="team-info-head">
@@ -153,33 +160,14 @@
                       <span class="material-symbols-rounded" aria-hidden="true">edit</span>
                     </button>
                   </div>
-                  <p class="team-desc" id="teamDesc"></p>
                   <div class="team-members-block">
                     <div class="block-head">
                       <span>成员 <b id="teamMemberCount">0</b></span>
                       <button class="text-button" id="manageMembers" type="button" hidden>管理</button>
                     </div>
-                    <ul class="member-strip" id="memberStrip"></ul>
+                    <ul class="member-list" id="memberList"></ul>
+                    <p class="member-hint" id="memberHint">点成员可以只看他上传的图片</p>
                   </div>
-                </article>
-
-                <article class="panel team-card-chat" id="teamChatCard">
-                  <div class="panel-head">
-                    <div>
-                      <h3>小组聊天</h3>
-                      <p class="panel-sub" id="chatStatus">正在连接…</p>
-                    </div>
-                    <button class="icon-button" id="expandChat" type="button" aria-label="展开聊天" title="展开到全屏">
-                      <span class="material-symbols-rounded" aria-hidden="true">open_in_full</span>
-                    </button>
-                  </div>
-                  <div class="chat-body" id="chatBody">
-                    <p class="chat-empty">正在读取小组消息…</p>
-                  </div>
-                  <form class="chat-composer" id="chatForm">
-                    <input type="text" id="chatInput" maxlength="2000" autocomplete="off" placeholder="输入消息" disabled />
-                    <button type="submit" id="sendChat" disabled>发送</button>
-                  </form>
                 </article>
               </div>
 
@@ -192,6 +180,7 @@
                   <button class="secondary-button" id="uploadToTeam" type="button">上传图片</button>
                   <input id="teamUploadInput" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden />
                 </div>
+                <div class="result-filter" id="resultFilter" hidden></div>
                 <div class="team-results" id="teamResults"></div>
               </article>
             </div>
@@ -217,6 +206,7 @@
                 <div><dt>文件大小</dt><dd id="detailSize">—</dd></div>
                 <div><dt>分析状态</dt><dd id="detailAnalysis">等待提交分析</dd></div>
               </dl>
+              <button class="secondary-button wide-button" id="downloadAnnotated" type="button">下载标注图</button>
               <button class="secondary-button wide-button" id="sendToGroup" type="button">上传到小组库</button>
               <button class="delete-button" id="deleteImageButton" type="button">删除图片</button>
             </aside>
@@ -251,25 +241,6 @@
         <h2 id="profileDialogTitle">个人资料与账号</h2>
         <p class="dialog-description">可以修改展示名称与联系方式。用户名作为登录账号暂不更改。</p>
 
-        <section class="theme-settings" aria-labelledby="themeSettingsTitle">
-          <div class="theme-settings-head">
-            <div><h3 id="themeSettingsTitle">外观与主题</h3><p>主题只改变界面外观，不会影响图片和分析数据。</p></div>
-            <span class="material-symbols-rounded" aria-hidden="true">palette</span>
-          </div>
-          <div class="theme-options" role="radiogroup" aria-label="界面主题">
-            <button class="theme-option" type="button" role="radio" aria-checked="false" data-theme-choice="clear-sky">
-              <span class="theme-preview theme-preview-clear"><i></i><i></i><i></i></span>
-              <span><strong>晴蓝</strong><small>Google / Material 3 · 默认</small></span>
-              <span class="material-symbols-rounded theme-check" aria-hidden="true">check_circle</span>
-            </button>
-            <button class="theme-option" type="button" role="radio" aria-checked="false" data-theme-choice="pure-white">
-              <span class="theme-preview theme-preview-pure"><i></i><i></i><i></i></span>
-              <span><strong>澄白</strong><small>保留当前极简界面</small></span>
-              <span class="material-symbols-rounded theme-check" aria-hidden="true">check_circle</span>
-            </button>
-          </div>
-        </section>
-
         <div class="avatar-editor">
           <span class="avatar avatar-64" id="profileAvatar" aria-hidden="true">·</span>
           <div class="avatar-editor-copy">
@@ -289,6 +260,35 @@
           <div class="settings-two-cols"><div><label for="profileEmail">邮箱</label><input id="profileEmail" type="email" maxlength="50" placeholder="可选" /></div><div><label for="profilePhone">手机号</label><input id="profilePhone" type="tel" maxlength="30" placeholder="可选" /></div></div>
           <div class="settings-actions"><p id="profileStatus" class="settings-status" role="status"></p><button class="primary-button" type="submit">保存资料</button></div>
         </form>
+      </section>
+    </div>
+
+    <!-- 设置：外观与主题、账号安全 -->
+    <div class="dialog-backdrop" id="settingsDialog" hidden>
+      <section class="dialog settings-dialog settings-hub" role="dialog" aria-modal="true" aria-labelledby="settingsDialogTitle">
+        <button class="dialog-close" id="closeSettingsDialog" type="button" aria-label="关闭">×</button>
+        <p class="section-kicker">SETTINGS</p>
+        <h2 id="settingsDialogTitle">设置</h2>
+        <p class="dialog-description">外观与账号安全都在这里。个人资料和头像在左侧「个人与账号」里。</p>
+
+        <section class="theme-settings" aria-labelledby="themeSettingsTitle">
+          <div class="theme-settings-head">
+            <div><h3 id="themeSettingsTitle">外观与主题</h3><p>主题只改变界面外观，不会影响图片和分析数据。</p></div>
+            <span class="material-symbols-rounded" aria-hidden="true">palette</span>
+          </div>
+          <div class="theme-options" role="radiogroup" aria-label="界面主题">
+            <button class="theme-option" type="button" role="radio" aria-checked="false" data-theme-choice="clear-sky">
+              <span class="theme-preview theme-preview-clear"><i></i><i></i><i></i></span>
+              <span><strong>晴蓝</strong><small>Google / Material 3 · 默认</small></span>
+              <span class="material-symbols-rounded theme-check" aria-hidden="true">check_circle</span>
+            </button>
+            <button class="theme-option" type="button" role="radio" aria-checked="false" data-theme-choice="pure-white">
+              <span class="theme-preview theme-preview-pure"><i></i><i></i><i></i></span>
+              <span><strong>澄白</strong><small>保留当前极简界面</small></span>
+              <span class="material-symbols-rounded theme-check" aria-hidden="true">check_circle</span>
+            </button>
+          </div>
+        </section>
 
         <form id="passwordForm" class="settings-form settings-divider">
           <h3>账号安全</h3><p class="settings-help">修改密码后当前登录会失效，需要用新密码重新登录。</p>
@@ -309,7 +309,6 @@
         <p class="dialog-description" id="groupDialogDesc">给小组起个名字，之后可以随时修改。</p>
         <form id="groupForm" class="settings-form">
           <label for="groupName">小组名称</label><input id="groupName" type="text" maxlength="50" placeholder="例如：校园植物标注组" />
-          <label for="groupDescription">小组介绍</label><textarea id="groupDescription" maxlength="300" rows="3" placeholder="写下小组的任务或分工（可选）"></textarea>
           <div class="settings-actions"><p id="groupStatus" class="settings-status" role="status"></p><button class="primary-button" id="saveGroupButton" type="submit">创建小组</button></div>
         </form>
         <div class="group-danger-zone" id="groupDanger" hidden>
@@ -363,8 +362,6 @@
         </div>
       </section>
     </div>
-
-    <div class="chat-scrim" id="chatScrim" hidden></div>
 
     <script src="sdk.js"></script>
     <script src="core.js"></script>

@@ -344,7 +344,7 @@ body.chat-open { overflow: hidden; }
 .chat-scrim[hidden] { display: none; }
 
 /* ---- 右侧：小组成果 ---- */
-.team-card-results { display: flex; min-height: 452px; flex-direction: column; padding: 18px; }
+.team-card-results { display: flex; min-height: 300px; flex-direction: column; padding: 18px; }
 .team-card-results .secondary-button { height: 30px; border-radius: 8px; font-size: 11px; }
 .team-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 10px; margin-top: 15px; }
 /* 没有成果时把提示垂直居中，否则一大片空白看起来像没加载完 */
@@ -643,3 +643,46 @@ body.is-leaving .utility-rail { opacity: 0; transform: translate(-22px, -50%); t
   .detail-meta h1 { margin-bottom: 20px; }
   .detail-meta dl div { padding: 13px 0; }
 }
+
+/* ==========================================================================
+   图像数据：勾选与批量下载
+   ========================================================================== */
+.image-toolbar { display: flex; align-items: center; gap: 14px; margin-top: 20px; border: 1px solid #e6e6eb; border-radius: 14px; background: #fff; padding: 10px 14px; }
+.image-toolbar[hidden] { display: none; }
+.toolbar-select { display: flex; align-items: center; gap: 7px; color: #4d4d52; font-size: 11.5px; cursor: pointer; }
+.toolbar-select input { width: 15px; height: 15px; accent-color: #0071e3; cursor: pointer; }
+.toolbar-count { flex: 1 1 auto; color: #8e8e93; font-size: 11.5px; }
+.image-toolbar .secondary-button { height: 32px; flex: 0 0 auto; border-radius: 9px; padding: 0 14px; font-size: 12px; white-space: nowrap; }
+.image-pick { display: grid; width: 24px; flex: 0 0 auto; place-items: center; align-self: stretch; cursor: pointer; }
+.image-pick input { width: 15px; height: 15px; accent-color: #0071e3; cursor: pointer; }
+.image-row.is-picked { background: #f2f7ff; }
+.image-row.is-picked:hover { background: #eaf3ff; }
+
+/* ==========================================================================
+   小组空间：成员列 + 成果筛选
+   ========================================================================== */
+.member-list { display: grid; margin: 0; padding: 0; list-style: none; gap: 2px; }
+.member-line { border-radius: 11px; }
+.member-line.is-filtering { background: #eaf3ff; box-shadow: inset 0 0 0 1px #cfe4ff; }
+.member-line-button { display: flex; width: 100%; min-width: 0; align-items: center; gap: 10px; border: 0; border-radius: 11px; background: transparent; padding: 7px 8px; font: inherit; text-align: left; cursor: pointer; transition: background 180ms ease; }
+.member-line-button:hover { background: #f5f6f8; }
+.member-line.is-filtering .member-line-button:hover { background: transparent; }
+.member-line-copy { display: grid; min-width: 0; flex: 1 1 auto; gap: 2px; }
+.member-line-name { display: flex; min-width: 0; align-items: center; gap: 5px; }
+.member-line-name strong { overflow: hidden; color: #171719; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.member-line-copy small { overflow: hidden; color: #a1a1aa; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.member-line-count { display: flex; flex: 0 0 auto; align-items: baseline; gap: 2px; color: #8e8e93; }
+.member-line-count b { color: #171719; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.member-line-count small { font-size: 9.5px; }
+.member-hint { margin: 10px 0 0; color: #a1a1aa; font-size: 10px; line-height: 1.5; }
+.role-me { color: #5f6368; background: #f0f0f3; }
+.result-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 13px; }
+.result-filter[hidden] { display: none; }
+.filter-chip { display: flex; align-items: center; gap: 6px; border: 1px solid #e6e6eb; border-radius: 999px; background: #fff; padding: 4px 10px; color: #4d4d52; font: inherit; font-size: 11px; cursor: pointer; transition: border-color 180ms ease, background 180ms ease, color 180ms ease; }
+.filter-chip:hover { border-color: #b8b8be; background: #fafafb; }
+.filter-chip.is-active { border-color: #8ab4f8; color: #0b57d0; background: #eaf3ff; }
+.filter-chip b { font-size: 10px; font-weight: 700; opacity: .72; font-variant-numeric: tabular-nums; }
+.result-uploader { position: absolute; top: 6px; left: 6px; max-width: calc(100% - 12px); overflow: hidden; border-radius: 999px; background: rgba(0, 0, 0, .46); padding: 2px 7px; color: #fff; font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
+.result-tile { position: relative; }
+/* 小组两栏各自按内容高度排，不互相拉高 */
+.team-grid { align-items: start; }

@@ -60,6 +60,7 @@ html[data-theme="clear-sky"] {
   --sky-text: #1f1f1f;
   --sky-muted: #5f6368;
   --sky-danger: #b3261e;
+  --sky-error-container: #f9dedc;
   --sky-nav-width: 232px;
   --sky-nav-compact: 76px;
   color-scheme: light;
@@ -239,11 +240,20 @@ html[data-theme="clear-sky"].is-nav-collapsed .logout-chip-copy {
   opacity: 0;
 }
 html[data-theme="clear-sky"].is-nav-collapsed .rail-profile-copy { max-width: 0; overflow: hidden; }
-html[data-theme="clear-sky"].is-nav-collapsed .rail-profile-meta { gap: 0; }
-html[data-theme="clear-sky"].is-nav-collapsed #railProfile { justify-content: center; padding: 8px 0; }
-html[data-theme="clear-sky"].is-nav-collapsed .rail-profile-meta { flex: 0 0 auto; }
+/* 收起时不要改成 justify-content:center —— 它不参与过渡，会在宽度动画
+   开始前把头像先横跳一段。保持左对齐 + 卡片内 8px 内边距：
+   76 - 10×2(侧栏) - 8×2(卡片) = 40，正好是头像宽度，天然居中且不跳。 */
+html[data-theme="clear-sky"].is-nav-collapsed .rail-profile-meta { flex: 0 0 auto; gap: 0; }
 html[data-theme="clear-sky"].is-nav-collapsed .logout-slot { width: 48px; margin-inline: auto; }
 html[data-theme="clear-sky"].is-nav-collapsed .utility-rail .logout-chip { width: 48px; padding: 0 7px; }
+
+/* 收起态点退出：侧栏会临时加宽到 232，文字得跟着回来，
+   否则展开的只是一条空壳，只有图标和「确定」。 */
+html[data-theme="clear-sky"].is-nav-collapsed .utility-rail:has(.logout-chip.is-open) .logout-chip-copy {
+  max-width: 200px;
+  overflow: hidden;
+  opacity: 1;
+}
 
 /* 内容层级 */
 html[data-theme="clear-sky"] .content,
@@ -500,3 +510,76 @@ html[data-theme="clear-sky"] .logout-chip-note { color: #7b8188; font-size: 9.5p
        内容列宽度会突然少 15px，文字随之重排（看起来像"文字突然变一行"）。
        预留滚动槽可以彻底消除这类重排。 */
 html[data-theme="clear-sky"] { scrollbar-gutter: stable; }
+
+/* ==========================================================================
+   晴蓝 · 危险确认卡
+   原实现是深红渐变 + 白字。晴蓝下通用 `html[...] .dialog { background:#fff }`
+   的优先级（0,2,1）高于 `.danger-dialog`（0,1,0），渐变被顶掉，
+   结果是白底 + 白字 —— 卡片"看起来没显示出来"。这里按 M3 错误色重做。
+   ========================================================================== */
+html[data-theme="clear-sky"] .danger-backdrop { background: rgba(31, 31, 31, .34); backdrop-filter: blur(3px); }
+html[data-theme="clear-sky"] .danger-dialog {
+  width: min(100%, 400px);
+  border: 1px solid var(--sky-outline-soft);
+  border-radius: 28px;
+  color: var(--sky-text);
+  background: #fff;
+  box-shadow: 0 16px 42px rgba(60, 64, 67, .22);
+}
+html[data-theme="clear-sky"] .danger-icon { width: 44px; height: 44px; margin-bottom: 18px; border: 0; border-radius: 14px; background: var(--sky-error-container); }
+html[data-theme="clear-sky"] .danger-icon .material-symbols-rounded { color: var(--sky-danger); font-variation-settings: "FILL" 1, "wght" 400; }
+html[data-theme="clear-sky"] .danger-dialog .section-kicker { color: var(--sky-danger); }
+html[data-theme="clear-sky"] .danger-dialog h2 { color: var(--sky-text); }
+html[data-theme="clear-sky"] .danger-dialog > p:not(.section-kicker) { color: var(--sky-muted); }
+html[data-theme="clear-sky"] .danger-detail { border-color: var(--sky-outline-soft); background: var(--sky-surface-low); color: var(--sky-muted); }
+html[data-theme="clear-sky"] .danger-actions button { border-radius: 999px; }
+html[data-theme="clear-sky"] .danger-actions #cancelDanger { color: var(--sky-primary); background: transparent; }
+html[data-theme="clear-sky"] .danger-actions #cancelDanger:hover { background: var(--sky-surface-mid); }
+html[data-theme="clear-sky"] .danger-actions #confirmDanger { color: #fff; background: var(--sky-danger); box-shadow: none; }
+html[data-theme="clear-sky"] .danger-actions #confirmDanger:hover { background: #9a201a; }
+html[data-theme="clear-sky"] .danger-actions button:focus-visible { outline: 2px solid var(--sky-danger); outline-offset: 2px; }
+
+/* 晴蓝 · 图像数据的勾选与工具栏 */
+html[data-theme="clear-sky"] .image-toolbar { border-color: var(--sky-outline-soft); border-radius: 16px; background: var(--sky-surface); padding: 12px 16px; }
+html[data-theme="clear-sky"] .toolbar-select input,
+html[data-theme="clear-sky"] .image-pick input { accent-color: var(--sky-primary); }
+html[data-theme="clear-sky"] .toolbar-count { color: var(--sky-muted); }
+html[data-theme="clear-sky"] .image-row.is-picked { background: var(--sky-primary-container); }
+html[data-theme="clear-sky"] .image-row.is-picked:hover { background: #c9dcfb; }
+
+/* 晴蓝 · 小组成员列与成果筛选 */
+html[data-theme="clear-sky"] .member-list { gap: 0; }
+html[data-theme="clear-sky"] .member-line { border-radius: 24px; }
+html[data-theme="clear-sky"] .member-line-button { border-radius: 24px; padding: 8px 10px; }
+html[data-theme="clear-sky"] .member-line-button:hover { background: var(--sky-surface-high); }
+html[data-theme="clear-sky"] .member-line.is-filtering { background: var(--sky-primary-container); box-shadow: none; }
+html[data-theme="clear-sky"] .member-line.is-filtering .member-line-button,
+html[data-theme="clear-sky"] .member-line.is-filtering .member-line-button:hover { background: transparent; }
+html[data-theme="clear-sky"] .member-line-name strong { color: var(--sky-text); font-size: 13px; }
+html[data-theme="clear-sky"] .member-line-copy small { color: var(--sky-muted); font-size: 11px; }
+html[data-theme="clear-sky"] .member-line-count { color: var(--sky-muted); }
+html[data-theme="clear-sky"] .member-line-count b { color: var(--sky-text); }
+html[data-theme="clear-sky"] .member-hint { color: var(--sky-muted); }
+html[data-theme="clear-sky"] .role-me { color: var(--sky-muted); background: var(--sky-surface-high); }
+html[data-theme="clear-sky"] .filter-chip { border-color: var(--sky-outline-soft); color: var(--sky-muted); background: var(--sky-surface); font-size: 12px; }
+html[data-theme="clear-sky"] .filter-chip:hover { background: var(--sky-surface-high); }
+html[data-theme="clear-sky"] .filter-chip.is-active { border-color: transparent; color: var(--sky-on-primary-container); background: var(--sky-primary-container); }
+html[data-theme="clear-sky"] .result-uploader { background: rgba(31, 31, 31, .55); }
+
+/* 晴蓝 · 小组标题下的一行元信息原来太淡（10.5px 浅灰），抬到正文级 */
+html[data-theme="clear-sky"] .team-info-title p { color: var(--sky-muted); font-size: 11px; }
+/* 主题卡第二行说明原来 9px，低于全站可读下限 */
+html[data-theme="clear-sky"] .theme-option small { font-size: 10.5px; }
+/* 勾选态底色收一点，别把整行压成一块色 */
+html[data-theme="clear-sky"] .image-row.is-picked { background: #e8f0fe; }
+html[data-theme="clear-sky"] .image-row.is-picked:hover { background: #ddeafc; }
+
+/* 窄屏底部工具轨原来写死 repeat(4, ...)，恰好放下 上传/数据/小组/个人。
+   新增「设置」后变成 5 个入口，第 5 个会被挤到第二行、被 64px 高度裁掉，
+   表现是"设置或个人信息直接消失"。这里放宽到 5 列。 */
+@media (max-width: 820px) {
+  html[data-theme="clear-sky"] .utility-rail,
+  html[data-theme="clear-sky"].is-nav-collapsed .utility-rail {
+    grid-template-columns: repeat(5, minmax(44px, 1fr));
+  }
+}

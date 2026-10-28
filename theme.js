@@ -93,14 +93,6 @@
       collapse.addEventListener("click", () => setNavCollapsed(!document.documentElement.classList.contains("is-nav-collapsed")));
     }
 
-    const quick = document.querySelector("#themeQuickButton");
-    if (quick) {
-      quick.addEventListener("click", () => {
-        document.querySelector("#railProfile")?.click();
-        window.setTimeout(() => document.querySelector("[data-theme-choice].is-active")?.focus(), 220);
-      });
-    }
-
     syncRailAccount();
     const name = document.querySelector("#appAccountName");
     const avatar = document.querySelector("#appAvatar");
