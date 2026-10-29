@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from app.data.account import Account
 from app.data.crud.group import create_personal_group
 from app.errors import ConflictError, ValidationError
+from app.services import storage
+from app.services.image_upload import prepare_avatar
 from app.utils.security import hash_password, verify_password
 
 
@@ -96,10 +98,14 @@ def verify_account(db: Session, *, username: str, password: str) -> Account | No
 
 
 def update_profile(db: Session, account: Account, **fields) -> Account:
-    allowed = {'email', 'phone'}
+    allowed = {'email', 'phone', 'display_name'}
     unknown = set(fields) - allowed
     if unknown:
         raise ValidationError(f'unexpected fields: {sorted(unknown)}')
+
+    # 展示名清空的两种写法（"" 与 null）统一落成 NULL，免得库里有空串
+    if 'display_name' in fields and not fields['display_name']:
+        fields['display_name'] = None
 
     new_email = fields.get('email')
     if new_email and db.scalar(
@@ -140,6 +146,44 @@ def change_password(
     account.token_version += 1
     db.commit()
     db.refresh(account)
+    return account
+
+
+def set_avatar(db: Session, account: Account, data: bytes) -> Account:
+    '''替换头像：先写存储再落库，落库失败就删掉刚写的对象。
+
+    数据库只存对象路径，换新图时旧对象在后一步删；顺序反过来的话，
+    提交失败会留下"库里有 key、存储里没文件"的坏状态。
+    '''
+    payload = prepare_avatar(data)
+    key = storage.build_avatar_key(account.id)
+    storage.save_bytes(key, payload)
+
+    old_key = account.avatar_key
+    account.avatar_key = key
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        storage.delete(key)
+        raise
+    db.refresh(account)
+
+    if old_key and old_key != key:
+        storage.delete(old_key)
+    return account
+
+
+def clear_avatar(db: Session, account: Account) -> Account:
+    '''移除头像；本来就没有时直接返回，保证幂等。'''
+    old_key = account.avatar_key
+    if not old_key:
+        return account
+
+    account.avatar_key = None
+    db.commit()
+    db.refresh(account)
+    storage.delete(old_key)
     return account
 
 

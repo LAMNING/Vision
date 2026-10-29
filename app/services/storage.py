@@ -109,6 +109,15 @@ def build_key(group_id: int, filename: str | None) -> str:
     return f'g{int(group_id)}/{uuid4().hex}{suffix}'
 
 
+def build_avatar_key(account_id: int) -> str:
+    '''头像对象路径：账号隔离 + uuid。
+
+    每次上传都换 key，旧对象删掉即可——前端 URL 是固定的
+    `/accounts/{id}/avatar`，靠 ETag 变化让浏览器重新取。
+    '''
+    return f'avatar/a{int(account_id)}/{uuid4().hex}.jpg'
+
+
 def save_bytes(key: str, data: bytes) -> None:
     get_storage().write_bytes(key, data)
 
@@ -187,6 +196,7 @@ __all__ = [
     'get_storage',
     'reset_storage_cache',
     'build_key',
+    'build_avatar_key',
     'save_bytes',
     'read_bytes',
     'delete',

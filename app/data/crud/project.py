@@ -77,7 +77,9 @@ def list_account_projects(db: Session, account_id: int) -> list[Project]:
 def list_viewable_projects(
     db: Session, account_id: int, *, include_archived: bool = False
 ) -> list[Project]:
-    '''我能看到的项目：自己管的组/个人空间里的、所在组里的、被显式加成员的。'''
+    '''我能看到的项目：自己管的组/个人空间里的、所在组里的、被显式加成员的、所在企业里的。'''
+    from app.data.enterprise import Enterprise, EnterpriseMember
+
     owned_group_ids = select(Group.id).where(Group.owner_account_id == account_id)
     member_group_ids = select(GroupMember.group_id).where(
         GroupMember.account_id == account_id
@@ -86,12 +88,22 @@ def list_viewable_projects(
         ProjectMember.account_id == account_id,
         ProjectMember.status == 'active',
     )
+    # 企业项目挂企业背后的隐藏组，成员没有 GroupMember 行，单独查一遍
+    enterprise_group_ids = (
+        select(Enterprise.group_id)
+        .join(
+            EnterpriseMember,
+            EnterpriseMember.enterprise_id == Enterprise.id,
+        )
+        .where(EnterpriseMember.account_id == account_id)
+    )
 
     stmt = select(Project).where(
         Project.deleted_at.is_(None),
         or_(
             Project.group_id.in_(owned_group_ids),
             Project.group_id.in_(member_group_ids),
+            Project.group_id.in_(enterprise_group_ids),
             Project.id.in_(project_ids),
         ),
     )

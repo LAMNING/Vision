@@ -23,6 +23,12 @@ logger = logging.getLogger(__name__)
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 单张图上限 50MB
 
+# 头像：前端限制 4MB，后端同样收口；落盘前统一转成 JPEG。
+AVATAR_MAX_BYTES = 4 * 1024 * 1024
+AVATAR_MAX_SIDE = 512
+AVATAR_QUALITY = 88
+AVATAR_MAX_PIXELS = 40_000_000  # 解压后像素上限，挡住"小文件大图"
+
 # 缩略图规格：thumb 用于列表网格，preview 用于详情/画框（前端拿到就能直接画）。
 THUMB_MAX_SIDE = 320
 PREVIEW_MAX_SIDE = 1280
@@ -47,6 +53,32 @@ def validate_upload_size(data: bytes) -> None:
         raise ValidationError(
             f'文件超过 {MAX_UPLOAD_BYTES // (1024 * 1024)} MB 上限'
         )
+
+
+def prepare_avatar(data: bytes) -> bytes:
+    '''校验并统一转成 JPEG，返回可直接落盘的字节。
+
+    转码而不是原样存，解决的是一组具体问题：Content-Type 不用再猜、
+    512px 封顶后单张只有几十 KB、EXIF 方向被纠正，以及解不开的文件
+    （SVG/HTML 伪装成 .png）根本进不来。
+    '''
+    if not data:
+        raise ValidationError('文件为空')
+    if len(data) > AVATAR_MAX_BYTES:
+        raise ValidationError(f'头像不能超过 {AVATAR_MAX_BYTES // (1024 * 1024)} MB')
+    try:
+        with PILImage.open(BytesIO(data)) as img:
+            if img.width * img.height > AVATAR_MAX_PIXELS:
+                raise ValidationError('图片尺寸过大，请换一张小一点的')
+            rgb = img.convert('RGB')
+            rgb.thumbnail((AVATAR_MAX_SIDE, AVATAR_MAX_SIDE))
+            buf = BytesIO()
+            rgb.save(buf, format='JPEG', quality=AVATAR_QUALITY, optimize=True)
+            return buf.getvalue()
+    except ValidationError:
+        raise
+    except Exception:
+        raise ValidationError('这个文件不是可用的图片，请换 JPG、PNG 或 WEBP') from None
 
 
 def variant_key(key: str, size: str) -> str:

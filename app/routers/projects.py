@@ -15,6 +15,7 @@ from app.data.crud.group import get_group
 from app.data.crud.project import list_viewable_projects
 from app.data.crud.project_access import (
     ProjectAccess,
+    require_group_manage,
     require_manage,
     require_upload,
     require_view,
@@ -29,7 +30,6 @@ from app.data.crud.project_category import (
     list_categories,
     update_category,
 )
-from app.data.crud.review import REVIEWER_ROLES
 from app.deps import CurrentAccount, DBSession
 from app.errors import (
     CategoryNotFoundError,
@@ -41,7 +41,12 @@ from app.errors import (
 from app.schemas.annotation import AnnotationListItem, AnnotationRead
 from app.schemas.base import Page
 from app.schemas.image import ImageRead
-from app.schemas.project import ProjectListItem, ProjectRead, ProjectUpdate
+from app.schemas.project import (
+    ProjectCreateInGroup,
+    ProjectListItem,
+    ProjectRead,
+    ProjectUpdate,
+)
 from app.schemas.project_auto_config import AutoConfigRead, AutoConfigUpdate
 from app.schemas.project_category import (
     CategoryCreate,
@@ -76,9 +81,6 @@ MAX_BATCH_FILES = 20
 def _project_item(db: Session, account: Account, project: Project) -> ProjectListItem:
     access = resolve_project_access(db, account, project.id)
     group = db.get(Group, project.group_id)
-    can_review = access.is_personal_owner or bool(
-        set(access.roles) & set(REVIEWER_ROLES)
-    )
     return ProjectListItem(
         **{
             'id': project.id,
@@ -91,7 +93,9 @@ def _project_item(db: Session, account: Account, project: Project) -> ProjectLis
             'group_name': group.name if group is not None else '',
             'group_type': group.type if group is not None else '',
             'role': access.label,
-            'can_review': can_review,
+            'can_review': access.can_review,
+            'can_manage': access.can_manage,
+            'can_upload': access.can_upload,
         }
     )
 
@@ -120,14 +124,58 @@ def list_projects(
     account: CurrentAccount,
     db: DBSession,
     include_archived: Annotated[bool, Query()] = False,
+    group_id: Annotated[int | None, Query()] = None,
+    group_type: Annotated[str | None, Query()] = None,
 ) -> list[ProjectListItem]:
-    '''我参与的所有项目（个人空间 + 团队 + 被邀请加入的）。'''
-    return [
+    '''我参与的所有项目（个人空间 + 小组 + 企业 + 被邀请加入的）。
+
+    ``group_id`` / ``group_type`` 供三个空间页过滤；不传就是全部。
+    '''
+    items = [
         _project_item(db, account, project)
         for project in list_viewable_projects(
             db, account.id, include_archived=include_archived
         )
     ]
+    if group_id is not None:
+        items = [item for item in items if item.group_id == group_id]
+    if group_type:
+        items = [item for item in items if item.group_type == group_type]
+    return items
+
+
+@router.post(
+    '', response_model=ProjectListItem, status_code=status.HTTP_201_CREATED
+)
+def create_project_in_group(
+    payload: ProjectCreateInGroup,
+    account: CurrentAccount,
+    db: DBSession,
+) -> ProjectListItem:
+    '''在指定空间里建项目：个人空间、小组、企业背后的组都走这里。
+
+    权限是空间级的（owner/admin），创建者自动成为项目 manager。
+    '''
+    group = require_group_manage(db, account, payload.group_id)
+    project = project_crud.create_project(
+        db,
+        group_id=group.id,
+        name=payload.name,
+        description=payload.description,
+        default_reviewer=payload.default_reviewer,
+        manager_account_id=account.id,
+    )
+    audit_crud.record(
+        db,
+        action='project.created',
+        resource_type='project',
+        resource_id=project.id,
+        actor_account_id=account.id,
+        group_id=group.id,
+        after={'name': project.name},
+        commit=True,
+    )
+    return _project_item(db, account, project)
 
 
 @router.get('/{project_id}', response_model=ProjectListItem)

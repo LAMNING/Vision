@@ -40,6 +40,11 @@ Username = Annotated[
 
 Password = Annotated[str, StringConstraints(min_length=8, max_length=128)]
 
+# 展示名：可选。空串由路由层转成 None（表示清空），所以不给 min_length。
+DisplayName = Annotated[
+    str, StringConstraints(strip_whitespace=True, max_length=50)
+]
+
 # 刻意不用 pydantic.EmailStr：它会引入 email-validator 依赖，
 # 而库里 email 只是 String(50)，且账号/邀请的匹配走的是原始字符串比较。
 Email = Annotated[

@@ -1,12 +1,12 @@
 /**
  * ImageLabel 原生 JS SDK（无依赖，浏览器 + Node 18+ 通用）
  *
- * 直接调用 FastAPI 后端（本项目前端默认 http://10.11.82.221:8000），Bearer token 由 SDK 自己保管。
+ * 直接调用 FastAPI 后端（浏览器里默认同源 location.origin），Bearer token 由 SDK 自己保管。
  *
  * 用法（浏览器，经典 script 标签）：
  *   <script src="/static/sdk.js"></script>
  *   <script>
- *     const sdk = new ImageLabelSDK({ baseUrl: 'http://10.11.82.221:8000' });
+ *     const sdk = new ImageLabelSDK();               // 同源，不用写地址
  *     await sdk.signin('alice', '12345678');          // 登录后 token 自动写进 sdk
  *     const projects = await sdk.listVisibleProjects();
  *     const page = await sdk.listAnnotations(projects[0].id, { limit: 20 });
@@ -14,7 +14,7 @@
  *
  * 用法（Node 18+ / ESM 项目）：
  *   const { ImageLabelSDK, SDKError } = require('./flask/static/sdk.js');
- *   const sdk = new ImageLabelSDK({ baseUrl: 'http://10.11.82.221:8000' });
+ *   const sdk = new ImageLabelSDK({ baseUrl: 'http://127.0.0.1:8000' });   // Node 里没有 location，必须显式传
  *
  * token 持久化（浏览器）：
  *   const sdk = new ImageLabelSDK({ storage: localStorage, tokenKey: 'il.token' });
@@ -88,7 +88,7 @@
   class ImageLabelSDK {
     /**
      * @param {object} [options]
-     * @param {string} [options.baseUrl]  后端地址，默认 http://10.11.82.221:8000
+     * @param {string} [options.baseUrl]  后端地址，默认浏览器同源；Node 里必须显式传
      * @param {string} [options.token]    初始 token
      * @param {number} [options.timeout]  毫秒，默认 15000
      * @param {object} [options.storage]  例如 window.localStorage，用于持久化 token
@@ -97,7 +97,8 @@
      * @param {Function} [options.onUnauthorized] 401 时的回调（清登录态/跳登录页）
      */
     constructor(options = {}) {
-      this.baseUrl = String(options.baseUrl || 'http://10.11.82.221:8000').replace(/\/+$/, '');
+      const sameOrigin = typeof location !== 'undefined' ? location.origin : '';
+      this.baseUrl = String(options.baseUrl || sameOrigin).replace(/\/+$/, '');
       this.timeout = options.timeout ?? 15000;
       this.storage = options.storage || null;
       this.tokenKey = options.tokenKey || 'imagelabel.token';
@@ -344,11 +345,32 @@
       return this._raw('POST', `/groups/${groupId}/leave`);
     }
 
-    // ---- 我可见的项目（个人空间 + 团队 + 被邀请） ----
+    // ---- 我可见的项目（个人空间 + 团队 + 企业 + 被邀请） ----
 
-    listVisibleProjects({ includeArchived = false } = {}) {
+    listVisibleProjects({ includeArchived = false, groupId, groupType } = {}) {
       return this._json('GET', '/projects', {
-        params: includeArchived ? { include_archived: 'true' } : undefined,
+        params: {
+          include_archived: includeArchived ? 'true' : undefined,
+          group_id: groupId,
+          group_type: groupType,
+        },
+      });
+    }
+
+    /** 我的个人空间（首次访问会创建）。个人项目建在它的 group_id 下。 */
+    mySpace() {
+      return this._json('GET', '/space');
+    }
+
+    /** 在指定空间里建项目：个人空间 / 小组 / 企业背后的组都走这里。 */
+    createProjectInGroup(groupId, name, { description, defaultReviewer } = {}) {
+      return this._json('POST', '/projects', {
+        json: {
+          group_id: groupId,
+          name,
+          description,
+          default_reviewer: defaultReviewer,
+        },
       });
     }
 
@@ -519,20 +541,7 @@
       return this._json('GET', `/groups/${groupId}/images/usage`);
     }
 
-    /** 小组聊天。远端后端未部署时会明确抛 404，由前端展示能力缺口。 */
-    listGroupMessages(groupId, { afterId, limit = 100 } = {}) {
-      return this._json('GET', `/groups/${groupId}/messages`, {
-        params: { after_id: afterId, limit },
-      });
-    }
-
-    sendGroupMessage(groupId, content) {
-      return this._json('POST', `/groups/${groupId}/messages`, {
-        json: { content },
-      });
-    }
-
-    // ---- 头像（Vision Studio 本地扩展，官方 SDK 未覆盖） ----
+    // ---- 头像 ----
 
     /** 上传/替换头像，返回更新后的账号（含 has_avatar）。 */
     uploadAvatar(file) {
@@ -550,8 +559,8 @@
       return { blob: out.body, contentType: out.headers.get('content-type') || 'image/png' };
     }
 
-    // ---- 企业空间（Vision Studio 本地扩展，官方后端尚未提供） ----
-    // 真实后端没有这组端点时会明确抛 404，前端据此展示「后端未开放」而不是崩掉。
+    // ---- 企业空间（前端先定契约，后端待实现） ----
+    // 后端没有这组端点时抛 404，前端据此展示「后端未开放」而不是崩掉。
 
     listEnterprises() {
       return this._json('GET', '/enterprises');
@@ -607,8 +616,10 @@
       return this._raw('POST', `/enterprises/${enterpriseId}/leave`);
     }
 
-    listEnterpriseImages(enterpriseId) {
-      return this._json('GET', `/enterprises/${enterpriseId}/images`);
+    listEnterpriseImages(enterpriseId, { offset, limit } = {}) {
+      return this._json('GET', `/enterprises/${enterpriseId}/images`, {
+        params: { offset, limit },
+      });
     }
 
     /** 企业图库上传：后端收复数 `files`，与项目上传一致。 */
@@ -636,16 +647,11 @@
       return this._json('GET', `/enterprises/${enterpriseId}/ranking`);
     }
 
-    getEnterpriseNotice(enterpriseId) {
-      return this._json('GET', `/enterprises/${enterpriseId}/notice`);
-    }
-
-    setEnterpriseNotice(enterpriseId, text) {
-      return this._json('PUT', `/enterprises/${enterpriseId}/notice`, { json: { text } });
-    }
-
-    listEnterpriseLogs(enterpriseId) {
-      return this._json('GET', `/enterprises/${enterpriseId}/logs`);
+    /** 公告不单独占接口：随 PATCH /enterprises/{id} 的 notice_text 一起改。 */
+    listEnterpriseLogs(enterpriseId, { offset, limit } = {}) {
+      return this._json('GET', `/enterprises/${enterpriseId}/logs`, {
+        params: { offset, limit },
+      });
     }
 
     enterpriseReport(enterpriseId, date) {

@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import Field
 
 from app.schemas.base import (
+    DisplayName,
     Email,
     InputModel,
     ORMModel,
@@ -34,10 +35,11 @@ class AccountCreate(InputModel):
 
 
 class AccountUpdate(InputModel):
-    '''PATCH 语义：只传要改的字段；显式传 null 表示清空 email / phone。'''
+    '''PATCH 语义：只传要改的字段；显式传 null 表示清空 email / phone / 展示名。'''
 
     email: Email | None = None
     phone: Phone | None = None
+    display_name: DisplayName | None = None
 
 
 class PasswordChange(InputModel):
@@ -54,11 +56,14 @@ class AccountRead(ORMModel):
 
     id: int
     username: str
+    display_name: str | None
     email: str | None
     phone: str | None
     platform_role: str
     email_verified: bool
     phone_verified: bool
+    # 由 Account.has_avatar 计算，不暴露 avatar_key（存储路径属于内部实现）
+    has_avatar: bool
     created_at: datetime
 
 
@@ -67,3 +72,5 @@ class AccountSummary(ORMModel):
 
     id: int
     username: str
+    display_name: str | None = None
+    has_avatar: bool = False

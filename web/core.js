@@ -2,7 +2,9 @@
 // 全站唯一的后端入口：sdk.js。业务脚本不再自己写 fetch。
 // 这里只做四件事：建 SDK 实例、把错误翻成中文、缓存头像、提供几个 DOM 小工具。
 window.VS = (() => {
-  const BASE = "http://10.11.82.221:8000";
+  // 默认同源（后端用 web/ 托管前端）。要临时指向别的后端，在 sdk.js 之前写
+  // <script>window.__VS_BASE__ = "http://host:port";</script>
+  const BASE = window.__VS_BASE__ || location.origin;
   const TOKEN_KEY = "vision-studio.token";
   const LEGACY_KEY = "vision_access_token";
 

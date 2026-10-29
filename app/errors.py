@@ -136,6 +136,33 @@ class DuplicateInvitationError(ConflictError, InvitationError):
         super().__init__(message)
 
 
+# ---- Enterprise ----
+class EnterpriseError(AppError): ...
+class EnterpriseNotFoundError(NotFoundError, EnterpriseError):
+    '''企业不存在，或当前账号不是成员（不区分，避免泄露企业是否存在）。'''
+    def __init__(self, enterprise_id: int):
+        super().__init__(f'enterprise {enterprise_id} not found')
+        self.enterprise_id = enterprise_id
+
+class EnterpriseMemberNotFoundError(NotFoundError, EnterpriseError):
+    def __init__(self, account_id: int):
+        super().__init__(f'account {account_id} is not a member of this enterprise')
+        self.account_id = account_id
+
+class EnterpriseQuotaError(ConflictError, EnterpriseError):
+    '''配额超限；detail 直接给用户看（前端原样显示）。'''
+    def __init__(self, resource: str, limit: int, used: int):
+        super().__init__(f'{resource}已满：{used}/{limit}')
+        self.resource = resource
+        self.limit = limit
+        self.used = used
+
+class EnterpriseRoleError(PermissionDeniedError, EnterpriseError):
+    def __init__(self, need: str):
+        super().__init__(f'需要{need}及以上权限')
+        self.need = need
+
+
 # ---- Image ----
 class ImageError(AppError): ...
 class ImageNotFoundError(NotFoundError, ImageError):

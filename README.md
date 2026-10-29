@@ -46,6 +46,8 @@ python -m app.cli.make_admin alice --reset-password  # 顺带重置密码并作�
 
 所有配置走环境变量（前缀 `IMAGELABEL_`）。仓库根的 `.env` 会被自动加载
 （`app/env.py`，**真实环境变量优先**），所以 CLI 和服务看到的配置始终一致。
+首次部署先 `cp .env.example .env`（Windows：`Copy-Item .env.example .env`），
+至少填一个固定的 `IMAGELABEL_SECRET_KEY`。
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
@@ -76,7 +78,7 @@ python -m app.cli.make_admin alice --reset-password  # 顺带重置密码并作�
 | 路径 | 内容 |
 |---|---|
 | `app/` | FastAPI 应用：`routers/` 路由、`schemas/` 出入参、`data/` 模型与 CRUD、`services/` 业务（自动标注 worker、存储、通知）、`cli/` 命令行工具、`utils/` 工具 |
-| `web/` | 前端：`login.html` 登录、`index.html` 工作台，`core.js` 负责接口封装，`sdk.js` 是可单独复用的 SDK |
+| `web/` | 前端：`login.html` 登录、`index.html` 空间列表 + 项目页 + 平台管理，`core.js` 负责接口封装，`sdk.js` 是可单独复用的 SDK |
 | `state/` | 默认本地存储根（图片文件），首次上传时自动创建 |
 
 ## 接口
@@ -94,7 +96,7 @@ python -m app.cli.make_admin alice --reset-password  # 顺带重置密码并作�
   `<script>window.__VS_BASE__ = "http://host:port";</script>`。
 - 想把前端单独跑起来（例如 `python -m http.server 8125`）调样式，后端要给
   `IMAGELABEL_CORS_ORIGINS=http://127.0.0.1:8125`，否则跨域会被拦。
-- 前端**按接口探测能力**：聊天记录、小组介绍、账号展示名、头像这些后端还没提供，
-  对应面板会自动禁用并说明原因。
-- 平台管理（账号/角色/存储策略/模型配置/审计）目前只有后端接口和 SDK 方法，
-  没有做页面。
+- 前端**按接口探测能力**：小组介绍这类后端还没提供的字段，对应面板会自动禁用并说明原因；
+  展示名称、头像、企业空间均已实现，探测到就自动显示入口。
+- 平台管理有独立页面：侧栏「平台管理」只对 `platform_role=admin` 可见（页面自身再校验一次），
+  含账号与平台角色、重置密码、小组 / 项目、审计日志、存储策略与模型配置。

@@ -26,6 +26,7 @@ from app.routers import (
     accounts,
     admin,
     auth,
+    enterprises,
     groups,
     health,
     images,
@@ -151,6 +152,7 @@ app.include_router(projects.router)
 app.include_router(invitations.router)
 app.include_router(images.router)
 app.include_router(admin.router)
+app.include_router(enterprises.router)
 app.include_router(unifile.router)
 app.include_router(tasks.router)
 app.include_router(notifications.router)

@@ -9,6 +9,7 @@ __all__ = [
     'DefaultReviewer',
     'ProjectStatus',
     'ProjectCreate',
+    'ProjectCreateInGroup',
     'ProjectUpdate',
     'ProjectRead',
     'ProjectListItem',
@@ -24,6 +25,12 @@ class ProjectCreate(InputModel):
     default_reviewer: DefaultReviewer = 'submitter'
     # 指定 manager 时 crud 会同时写入 ProjectMember（upsert_member）
     manager_account_id: int | None = Field(default=None, gt=0)
+
+
+class ProjectCreateInGroup(ProjectCreate):
+    '''在指定空间里建项目：个人空间、小组、企业（背后的组）都走这里。'''
+
+    group_id: int = Field(gt=0)
 
 
 class ProjectUpdate(InputModel):
@@ -55,3 +62,6 @@ class ProjectListItem(ProjectRead):
     group_type: str
     role: str
     can_review: bool = False
+    # 能不能在项目里上传、能不能改设置，前端据此决定入口显隐
+    can_manage: bool = False
+    can_upload: bool = False

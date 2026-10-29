@@ -68,7 +68,7 @@
   let heartbeatTimer = 0;
   let entering = false;
 
-  const thumbUrls = new Map();   // image.id → objectURL
+  const thumbUrls = new Map();   // image.image_id → objectURL
 
   const roleOf = () => (current && current.my_role) || null;
   const rank = (role) => (role == null ? -1 : 4 - ROLE_ORDER[role]);
@@ -94,17 +94,19 @@
     return ent ? `ENT-${ent.id}` : "—";
   }
 
+  // 企业图的 id 是关联行 id，取图要用它指向的 Image id
   function thumbFor(image, node) {
     if (!image || !node) return;
-    const cached = thumbUrls.get(image.id);
+    const key = image.image_id;
+    const cached = thumbUrls.get(key);
     if (cached) {
       node.src = cached;
       return;
     }
-    call(() => sdk.imageContent(image.id))
+    call(() => sdk.imageContent(key))
       .then(({ blob }) => {
         const url = URL.createObjectURL(blob);
-        thumbUrls.set(image.id, url);
+        thumbUrls.set(key, url);
         if (node.isConnected) node.src = url;
       })
       .catch(() => {
@@ -201,7 +203,7 @@
       showEmpty(
         unsupported ? "当前后端还没有企业接口" : "企业数据读取失败",
         unsupported
-          ? "企业空间需要后端提供 /enterprises 一组接口。真实后端（10.11.82.221）尚未部署，先用本地虚拟后端查看完整效果。"
+          ? "当前连接的后端没有企业接口，可能是版本过旧。"
           : text
       );
       return;
@@ -278,7 +280,8 @@
   async function loadImages() {
     if (!entId()) return;
     try {
-      images = (await call(() => sdk.listEnterpriseImages(entId()))) || [];
+      const page = await call(() => sdk.listEnterpriseImages(entId(), { limit: 200 }));
+      images = (page && page.items) || [];
     } catch {
       images = [];
     }
@@ -295,7 +298,8 @@
 
   async function loadLogs() {
     if (!entId()) return;
-    logs = (await call(() => sdk.listEnterpriseLogs(entId()))) || [];
+    const page = await call(() => sdk.listEnterpriseLogs(entId(), { limit: 100 }));
+    logs = (page && page.items) || [];
   }
 
   async function loadReport() {
@@ -363,7 +367,7 @@
   }
 
   function renderNotice() {
-    const text = (current && current.notice && current.notice.text) || "";
+    const text = (current && current.notice_text) || "";
     noticeBox.hidden = !text;
     noticeText.textContent = text;
   }
@@ -518,7 +522,7 @@
         // 详情页那个删除按钮走的是个人图端点，点下去只会 404，所以这里不给它。
         window.VSApp?.openImageDetail(image, {
           source: "enterprise",
-          analysisImageId: Number(image.id),
+          analysisImageId: Number(image.image_id),
           canDelete: false,
         });
       });
@@ -568,7 +572,7 @@
       note.type = "button";
       pass.addEventListener("click", () => decide(image, "approve", pass));
       drop.addEventListener("click", () => decide(image, "reject", drop));
-      note.addEventListener("click", () => window.VSApp?.openImageDetail(image, { source: "enterprise", analysisImageId: Number(image.id), canDelete: false }));
+      note.addEventListener("click", () => window.VSApp?.openImageDetail(image, { source: "enterprise", analysisImageId: Number(image.image_id), canDelete: false }));
       actions.append(note, drop, pass);
       row.append(thumb, copy, actions);
       reviewPane.append(row);
@@ -579,7 +583,7 @@
   async function decide(image, decision, button) {
     if (button) button.disabled = true;
     try {
-      await call(() => sdk.reviewEnterpriseImage(entId(), image.id, decision));
+      await call(() => sdk.reviewEnterpriseImage(entId(), image.image_id, decision));
       await refreshAfterChange();
     } catch (error) {
       status("#entResultsMeta", error.message, true);
@@ -861,7 +865,7 @@
     $("#entQuotaMembersInput").value = String(current.quota_members || 0);
     $("#entAutoApprove").checked = !!current.auto_approve_staff;
     $("#entOpenJoin").checked = current.join_mode === "open";
-    $("#entNoticeInput").value = (current.notice && current.notice.text) || "";
+    $("#entNoticeInput").value = current.notice_text || "";
     status("#entNoticeStatus", "");
     status("#entQuotaStatus", "");
 
@@ -974,7 +978,7 @@
     event.preventDefault();
     const button = $("#saveEntNotice");
     runForm(button, "#entNoticeStatus", async () => {
-      await call(() => sdk.setEnterpriseNotice(entId(), $("#entNoticeInput").value.trim()));
+      await call(() => sdk.updateEnterprise(entId(), { notice_text: $("#entNoticeInput").value.trim() || null }));
       await refreshAfterChange();
       status("#entNoticeStatus", "已发布");
     });

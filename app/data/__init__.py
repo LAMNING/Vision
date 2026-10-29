@@ -13,6 +13,13 @@ from app.data.task_image import TaskImage
 from app.data.annotation import Annotation
 from app.data.review import Review
 from app.data.audit_log import AuditLog
+from app.data.enterprise import (
+    Enterprise,
+    EnterpriseImage,
+    EnterpriseJoinRequest,
+    EnterpriseLog,
+    EnterpriseMember,
+)
 from app.data.notification import Notification
 from app.data.revoked_token import RevokedToken
 
@@ -33,6 +40,11 @@ __all__ = [
     'Annotation',
     'Review',
     'AuditLog',
+    'Enterprise',
+    'EnterpriseImage',
+    'EnterpriseJoinRequest',
+    'EnterpriseLog',
+    'EnterpriseMember',
     'Notification',
     'RevokedToken',
 ]

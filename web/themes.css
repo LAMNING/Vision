@@ -2,11 +2,9 @@
    澄白（pure-white）继续使用原 styles.css / login.css；
    晴蓝（clear-sky）提供宽松 Material 3；经典（classic）在其上收紧为工作台。 */
 
-.rail-label-clear,
 .rail-profile-meta,
 .theme-quick-button,
-.classic-analysis-card,
-.classic-recent-panel { display: none; }
+.classic-analysis-card { display: none; }
 #railCollapse { display: none; }
 
 
@@ -146,10 +144,8 @@ html[data-theme="clear-sky"] .utility-rail button:not(.logout-chip) {
   padding: 0 16px;
   transition: color 160ms ease, background 160ms ease;
 }
-html[data-theme="clear-sky"] .utility-rail button:not(.logout-chip):hover,
-html[data-theme="clear-sky"] .utility-rail #railData:hover { color: var(--sky-on-primary-container); background: #e8f0fe; }
-html[data-theme="clear-sky"] .utility-rail button:not(.logout-chip).is-active,
-html[data-theme="clear-sky"] .utility-rail #railData.is-active { color: var(--sky-on-primary-container); background: var(--sky-primary-container); box-shadow: none; }
+html[data-theme="clear-sky"] .utility-rail button:not(.logout-chip):hover { color: var(--sky-on-primary-container); background: #e8f0fe; }
+html[data-theme="clear-sky"] .utility-rail button:not(.logout-chip).is-active { color: var(--sky-on-primary-container); background: var(--sky-primary-container); box-shadow: none; }
 html[data-theme="clear-sky"] .utility-rail button:not(.logout-chip).is-active .material-symbols-rounded { font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24; }
 html[data-theme="clear-sky"] .utility-rail .rail-label {
   margin-left: 16px;
@@ -164,7 +160,6 @@ html[data-theme="clear-sky"] .utility-rail .rail-label {
   transition: max-width 200ms cubic-bezier(.2, 0, 0, 1), margin-left 200ms cubic-bezier(.2, 0, 0, 1), opacity 140ms ease;
 }
 html[data-theme="clear-sky"] .rail-label-current { display: none; }
-html[data-theme="clear-sky"] .rail-label-clear { display: inline; }
 html[data-theme="clear-sky"] .rail-divider { width: calc(100% - 20px); margin: 10px auto; background: var(--sky-outline-soft); }
 
 html[data-theme="clear-sky"] #railProfile {
@@ -330,10 +325,6 @@ html[data-theme="clear-sky"] .primary-button:hover { background: var(--sky-prima
 html[data-theme="clear-sky"] .secondary-button { border-color: var(--sky-outline-soft); border-radius: 18px; color: var(--sky-primary); background: #fff; }
 html[data-theme="clear-sky"] .secondary-button:hover { border-color: #8ab4f8; color: var(--sky-primary-hover); background: #f5f9ff; transform: none; }
 
-html[data-theme="clear-sky"] .view-hero { display: grid; grid-template-columns: 1fr auto; align-items: end; column-gap: 24px; border-color: var(--sky-outline-soft); padding: 8px 0 26px; }
-html[data-theme="clear-sky"] .view-hero h1 { font-size: clamp(30px, 3vw, 40px); letter-spacing: -.035em; }
-html[data-theme="clear-sky"] .view-hero > p:not(.section-kicker) { margin: 8px 0 0; color: var(--sky-muted); }
-html[data-theme="clear-sky"] .view-hero > .secondary-button { grid-column: 2; grid-row: 1 / 4; }
 html[data-theme="clear-sky"] .image-list { border-color: var(--sky-outline-soft); border-radius: 16px; background: var(--sky-outline-soft); }
 html[data-theme="clear-sky"] .image-row { background: #fff; }
 html[data-theme="clear-sky"] .image-row:hover { background: #f5f9ff; }
@@ -413,8 +404,6 @@ html[data-theme="clear-sky"] .analysis-tag { background: var(--sky-primary); }
 
 @media (max-width: 620px) {
   .theme-options { grid-template-columns: 1fr; }
-  html[data-theme="clear-sky"] .view-hero { display: block; }
-  html[data-theme="clear-sky"] .view-hero > .secondary-button { margin-top: 18px; }
   html[data-theme="clear-sky"] .selection-actions { align-items: stretch; flex-direction: column; }
   html[data-theme="clear-sky"] .selection-actions .primary-button { justify-content: center; }
 }
@@ -791,50 +780,6 @@ html[data-vision-theme="classic"] .classic-status-grid > span:nth-child(3) b { c
 html[data-vision-theme="classic"] .classic-status-grid small { color: var(--sky-muted); font-size: 11px; white-space: nowrap; }
 
 html[data-vision-theme="classic"] .selection-panel { margin-top: 16px; }
-html[data-vision-theme="classic"] .classic-recent-panel {
-  display: block;
-  margin-top: 16px;
-  overflow: hidden;
-  border: 1px solid var(--sky-outline-soft);
-  border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(60, 64, 67, .08);
-}
-html[data-vision-theme="classic"] .classic-recent-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; padding: 15px 17px 12px; }
-html[data-vision-theme="classic"] .classic-recent-head .section-kicker { margin: 0 0 3px; font-size: 11px; }
-html[data-vision-theme="classic"] .classic-recent-head h2 { margin: 0; color: var(--sky-text); font-size: 16px; letter-spacing: -.02em; }
-html[data-vision-theme="classic"] .classic-recent-head .text-button { color: var(--sky-primary); font-size: 11px; }
-html[data-vision-theme="classic"] .classic-recent-state { border-top: 1px solid var(--sky-outline-soft); }
-html[data-vision-theme="classic"] .classic-recent-state.is-empty { padding: 25px 17px; color: var(--sky-muted); font-size: 11px; text-align: center; }
-html[data-vision-theme="classic"] .classic-recent-state.is-empty p { margin: 0; }
-html[data-vision-theme="classic"] .classic-recent-row {
-  display: grid;
-  width: 100%;
-  min-height: 66px;
-  grid-template-columns: 48px minmax(150px, 1.4fr) minmax(130px, 1fr) 92px 20px;
-  align-items: center;
-  gap: 12px;
-  border: 0;
-  border-top: 1px solid #edf0f5;
-  background: #fff;
-  padding: 7px 16px;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background 100ms ease;
-}
-html[data-vision-theme="classic"] .classic-recent-row:first-child { border-top: 0; }
-html[data-vision-theme="classic"] .classic-recent-row:hover { background: #f7faff; }
-html[data-vision-theme="classic"] .classic-row-thumb { width: 48px; height: 48px; border-radius: 9px; background: var(--sky-surface-high); object-fit: cover; }
-html[data-vision-theme="classic"] .classic-row-file { display: grid; min-width: 0; gap: 4px; }
-html[data-vision-theme="classic"] .classic-row-file strong { overflow: hidden; color: var(--sky-text); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
-html[data-vision-theme="classic"] .classic-row-file small { color: var(--sky-muted); font-size: 11px; }
-html[data-vision-theme="classic"] .classic-row-target { overflow: hidden; color: var(--sky-primary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-html[data-vision-theme="classic"] .classic-row-status { justify-self: start; border-radius: 999px; background: var(--sky-surface-high); padding: 5px 9px; color: var(--sky-muted); font-size: 11px; white-space: nowrap; }
-html[data-vision-theme="classic"] .classic-row-status.is-analyzing { background: #e8f0fe; color: var(--sky-primary); }
-html[data-vision-theme="classic"] .classic-row-status.is-completed { background: #e6f4ea; color: #137333; }
-html[data-vision-theme="classic"] .classic-row-status.is-failed { background: var(--sky-error-container); color: var(--sky-danger); }
-html[data-vision-theme="classic"] .classic-row-go { color: #9aa0a6; font-size: 18px; }
 
 /* 动效节奏不在这里各自为政：三套主题共用文件末尾「全站统一层」的一套时长。
    本段只保留经典主题特有的观感差异（无位移的悬停、更短的反馈）。 */
@@ -843,7 +788,6 @@ html[data-vision-theme="classic"] .dialog-backdrop { transition-duration: 160ms;
 @media (max-width: 940px) {
   html[data-vision-theme="classic"] { --sky-nav-width: 200px; }
   html[data-vision-theme="classic"] .upload-hero { grid-template-columns: minmax(0, 1.6fr) minmax(240px, 1fr); }
-  html[data-vision-theme="classic"] .classic-recent-row { grid-template-columns: 48px minmax(130px, 1.4fr) minmax(100px, 1fr) 82px 18px; }
 }
 
 @media (max-width: 820px) {
@@ -856,15 +800,11 @@ html[data-vision-theme="classic"] .dialog-backdrop { transition-duration: 160ms;
   html[data-vision-theme="classic"] .target-plan-card,
   html[data-vision-theme="classic"] .classic-analysis-card { grid-column: 1; grid-row: auto; }
   html[data-vision-theme="classic"] .upload-zone { min-height: 210px; }
-  html[data-vision-theme="classic"] .classic-recent-row { grid-template-columns: 44px minmax(0, 1fr) 82px 18px; gap: 9px; padding-inline: 11px; }
-  html[data-vision-theme="classic"] .classic-row-thumb { width: 44px; height: 44px; }
-  html[data-vision-theme="classic"] .classic-row-target { display: none; }
 }
 
 @media (max-width: 620px) {
   .theme-options { grid-template-columns: 1fr; }
   html[data-vision-theme="classic"] .classic-status-grid > span { padding-inline: 8px; }
-  html[data-vision-theme="classic"] .classic-recent-head { padding-inline: 13px; }
 }
 
 /* ==========================================================================
@@ -910,7 +850,6 @@ html[data-theme="clear-sky"] .upload-hero h1 {
   letter-spacing: -.03em;
   line-height: 1.12;
 }
-html[data-theme="clear-sky"] .view-hero h1,
 html[data-theme="clear-sky"] .team-head h1 {
   font-size: var(--fs-page);
   letter-spacing: -.025em;
@@ -919,8 +858,6 @@ html[data-theme="clear-sky"] .team-head h1 {
 
 /* ---------- 3. 内页密度：向首页看齐，不再「首页紧凑、内页空」 ---------- */
 html[data-theme="clear-sky"] .hero { padding-bottom: 24px; }
-html[data-theme="clear-sky"] .view-hero { padding: 14px 0 22px; }
-html[data-theme="clear-sky"] .view-hero > p:not(.section-kicker) { max-width: 580px; margin: 7px 0 0; font-size: 13px; line-height: 1.6; }
 html[data-theme="clear-sky"] .team-head { padding: 14px 0 16px; }
 html[data-theme="clear-sky"] .image-row { min-height: 64px; }
 html[data-theme="clear-sky"] .empty-state { min-height: 168px; }
@@ -1023,3 +960,40 @@ html[data-theme] .secondary-button {
     padding-block: 20px 100px;
   }
 }
+
+/* ---------- 平台管理 ---------- */
+html[data-theme="clear-sky"] .admin-stat,
+html[data-theme="clear-sky"] .admin-panel { border-color: var(--sky-outline-soft); background: var(--sky-surface); border-radius: 16px; }
+html[data-theme="clear-sky"] .admin-stat b,
+html[data-theme="clear-sky"] .admin-identity-copy strong,
+html[data-theme="clear-sky"] .admin-name-line strong { color: var(--sky-text); }
+html[data-theme="clear-sky"] .admin-stat small,
+html[data-theme="clear-sky"] .admin-fact span,
+html[data-theme="clear-sky"] .admin-cell-muted,
+html[data-theme="clear-sky"] .admin-cell-time,
+html[data-theme="clear-sky"] .admin-pager { color: var(--sky-muted); }
+html[data-theme="clear-sky"] .admin-table th { border-bottom-color: var(--sky-outline-soft); color: var(--sky-muted); font-size: 11px; }
+html[data-theme="clear-sky"] .admin-table td { border-bottom-color: var(--sky-outline-soft); color: var(--sky-text); font-size: 12px; }
+html[data-theme="clear-sky"] .admin-fact { border-bottom-color: var(--sky-outline-soft); }
+html[data-theme="clear-sky"] .admin-toolbar input[type="search"],
+html[data-theme="clear-sky"] .admin-toolbar select,
+html[data-theme="clear-sky"] .admin-select,
+html[data-theme="clear-sky"] .admin-view .settings-form select { border-color: var(--sky-outline); border-radius: 10px; background: var(--sky-surface); color: var(--sky-text); }
+
+/* ---------- 空间列表 / 项目页 / 抽屉 ---------- */
+html[data-theme="clear-sky"] .project-row,
+html[data-theme="clear-sky"] .space-drawer-panel,
+html[data-theme="clear-sky"] .space-drawer-head { border-color: var(--sky-outline-soft); background: var(--sky-surface); }
+html[data-theme="clear-sky"] .project-row:hover { background: var(--sky-surface-low); }
+html[data-theme="clear-sky"] .project-row-icon { background: var(--sky-surface-high); color: var(--sky-on-primary-container); }
+html[data-theme="clear-sky"] .project-row-title strong,
+html[data-theme="clear-sky"] .project-head-main h1,
+html[data-theme="clear-sky"] .project-task-copy strong,
+html[data-theme="clear-sky"] .project-member-copy strong { color: var(--sky-text); }
+html[data-theme="clear-sky"] .project-row-desc,
+html[data-theme="clear-sky"] .project-desc,
+html[data-theme="clear-sky"] .project-row-meta,
+html[data-theme="clear-sky"] .project-task-copy small,
+html[data-theme="clear-sky"] .project-line { color: var(--sky-muted); }
+html[data-theme="clear-sky"] .project-head { border-color: var(--sky-outline-soft); }
+html[data-theme="clear-sky"] .space-drawer-body { background: var(--sky-surface-low); }

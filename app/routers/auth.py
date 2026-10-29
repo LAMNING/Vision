@@ -1,12 +1,22 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.data import Account
 from app.data.crud.account import (
     change_password,
+    clear_avatar,
     register_account,
+    set_avatar,
     update_profile,
     verify_account,
 )
@@ -118,6 +128,25 @@ def update_me(
     payload: AccountUpdate, account: CurrentAccount, db: DBSession
 ) -> Account:
     return update_profile(db, account, **payload.model_dump(exclude_unset=True))
+
+
+@router.post('/me/avatar', response_model=AccountRead)
+def upload_my_avatar(
+    account: CurrentAccount,
+    db: DBSession,
+    file: UploadFile = File(...),
+) -> Account:
+    '''上传/替换头像（form 字段名 `file`，与前端 sdk.uploadAvatar 一致）。
+
+    图片在服务端统一转成 512px 内的 JPEG 再落存储，库里只留对象路径。
+    '''
+    return set_avatar(db, account, file.file.read())
+
+
+@router.delete('/me/avatar', status_code=status.HTTP_204_NO_CONTENT)
+def delete_my_avatar(account: CurrentAccount, db: DBSession) -> None:
+    '''移除头像；本来就没有也返回 204（幂等）。'''
+    clear_avatar(db, account)
 
 
 @router.post('/me/password', status_code=status.HTTP_204_NO_CONTENT)

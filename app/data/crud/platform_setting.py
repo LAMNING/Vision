@@ -1,5 +1,6 @@
 import os
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.data import PlatformSetting
@@ -34,12 +35,26 @@ def read_setting(db: Session) -> PlatformSetting | None:
 
 
 def get_setting(db: Session) -> PlatformSetting:
+    '''取平台设置，没有就建默认行。
+
+    并发首次访问会撞车：管理页一次并发拉 storage-policy 和 model-config，
+    两个请求都读不到 id=1，都去插入，后提交的那个拿 UNIQUE 冲突。
+    这里把冲突当成「对方已经建好」，回滚后直接读那一行。
+    '''
     setting = read_setting(db)
     if setting is not None:
         return setting
+
     setting = PlatformSetting(id=SETTING_ID)
     db.add(setting)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = read_setting(db)
+        if existing is None:
+            raise
+        return existing
     db.refresh(setting)
     return setting
 

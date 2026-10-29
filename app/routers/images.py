@@ -5,6 +5,7 @@ from fastapi import APIRouter, File, Header, Response, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.data.crud import audit as audit_crud
+from app.data.crud import enterprise as enterprise_crud
 from app.data.crud import group as group_crud
 from app.data.crud import group_member as gm
 from app.data.crud import image as image_crud
@@ -25,6 +26,7 @@ from app.services.image_upload import (
     variant_key,
 )
 from app.services.unifile import FileNotFound
+from app.utils.http import etag_matches
 
 router = APIRouter(tags=['images'])
 
@@ -43,10 +45,12 @@ def _require_member(db, group_id: int, account_id: int):
 
 
 def _require_read_access(db, image, account_id: int) -> None:
-    '''下载权限：同组成员，或该图所在项目的成员。'''
+    '''下载权限：同组成员、该图所在项目的成员，或该企业空间的成员。'''
     membership = gm.get_membership(db, image.group_id, account_id)
     if membership is None and not project_image_crud.account_can_access_via_project(
         db, image.id, account_id
+    ) and not enterprise_crud.account_can_view_group(
+        db, image.group_id, account_id
     ):
         raise PermissionDeniedError(
             f'account {account_id} is not a member of group {image.group_id}'
@@ -123,22 +127,6 @@ def image_usage(group_id: int, account: CurrentAccount, db: DBSession):
     )
 
 
-def _etag_matches(if_none_match: str | None, etag: str) -> bool:
-    if not if_none_match:
-        return False
-    raw = if_none_match.strip()
-    if raw == '*':
-        return True
-    # 支持 "a", "b" 与 W/"a" 两种写法。
-    for token in raw.split(','):
-        candidate = token.strip()
-        if candidate.startswith('W/'):
-            candidate = candidate[2:]
-        if candidate.strip('"') == etag.strip('"'):
-            return True
-    return False
-
-
 def _ensure_variant(image, size: str) -> str:
     '''返回缩略图对象 key；老的图没有缩略图时按需生成并落存储。'''
     key = variant_key(image.storage_key, size)
@@ -187,7 +175,7 @@ def download_image(
         'Content-Disposition': 'inline',
         'Content-Type': media_type,
     }
-    if _etag_matches(if_none_match, etag):
+    if etag_matches(if_none_match, etag):
         return Response(status_code=304, headers=headers)
 
     info = storage.stat_info(key)

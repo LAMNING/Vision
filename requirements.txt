@@ -1,0 +1,13 @@
+# 运行依赖。numpy / Pillow / onnxruntime 只在自动标注时用，但 numpy 在启动
+# 导入链上（app.services.model.detector），所以不能省。
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30
+SQLAlchemy>=2.0,<2.1
+pydantic>=2.7,<3.0
+PyJWT>=2.8
+pwdlib[argon2]>=0.2
+python-multipart>=0.0.9
+alembic>=1.13
+Pillow>=10.3
+numpy>=1.26
+onnxruntime>=1.19

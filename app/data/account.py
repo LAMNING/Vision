@@ -18,10 +18,15 @@ class Account(BasicModel):
     id: Mapped[int] = mapped_column(primary_key=True)
 
     username: Mapped[str] = mapped_column(String(30), nullable=False, unique=True, index=True)
+    # 展示名：只影响界面称呼，登录始终用 username
+    display_name: Mapped[str | None] = mapped_column(String(50))
     password: Mapped[str] = mapped_column(String(128), nullable=False)
 
     email: Mapped[str | None] = mapped_column(String(50), unique=True, index=True)
     phone: Mapped[str | None] = mapped_column(String(30), unique=True, index=True)
+
+    # 头像对象在 storage 里的路径；None 表示没上传（对外只暴露 has_avatar）
+    avatar_key: Mapped[str | None] = mapped_column(String(255))
 
     email_verified: Mapped[bool] = mapped_column(default=False)
     phone_verified: Mapped[bool] = mapped_column(default=False)
@@ -51,3 +56,8 @@ class Account(BasicModel):
 
     def __repr__(self) -> str:
         return f'<Account id={self.id} username={self.username!r}>'
+
+    @property
+    def has_avatar(self) -> bool:
+        '''给响应模型用：外部不需要知道对象路径，只关心有没有。'''
+        return bool(self.avatar_key)

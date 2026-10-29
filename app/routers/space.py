@@ -16,6 +16,7 @@ from app.data.crud.project import (
 )
 from app.deps import CurrentAccount, DBSession
 from app.errors import ProjectNotFoundError, ValidationError
+from app.schemas.group import GroupRead
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
 
 router = APIRouter(prefix='/space', tags=['space'])
@@ -34,6 +35,15 @@ def _my_project(db: Session, account: Account, project_id: int) -> Project:
         raise ProjectNotFoundError(project_id)
 
     return project
+
+
+@router.get('', response_model=GroupRead)
+def get_my_space(account: CurrentAccount, db: DBSession) -> Group:
+    '''我的个人空间（首次访问时自动创建）。
+
+    个人空间不在 ``/groups`` 里（那里只有 team/org），前端建项目需要它的 id。
+    '''
+    return _my_space(db, account)
 
 
 @router.get('/projects', response_model=list[ProjectRead])
