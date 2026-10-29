@@ -1,0 +1,189 @@
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.data.review import REVIEW_DECISIONS, Review
+from app.data.task import Task
+from app.data.crud import annotation as ann
+from app.data.crud import audit
+from app.data.crud import notification as notif_crud
+from app.data.crud import project_member as pmm
+from app.data.crud import task as tsk
+from app.data.crud import task_image as ti
+from app.errors import (
+    IncompleteReviewError,
+    InvalidReviewDecisionError,
+    InvalidTaskTransitionError,
+    ReviewerNotAllowedError,
+)
+from app.utils.time import utcnow
+
+REVIEWER_ROLES = ('reviewer', 'manager')
+
+_DECISION_TO_STATUS = {
+    'approve': 'approved',
+    'reject_fix': 'rejected_fix',
+    'reject_reannotate': 'rejected_reannotate',
+}
+
+
+def list_reviews(db: Session, task_id: int) -> list[Review]:
+    stmt = (
+        select(Review)
+        .where(Review.task_id == task_id)
+        .order_by(Review.round)
+    )
+    return list(db.scalars(stmt).all())
+
+
+def next_round(db: Session, task_id: int) -> int:
+    current = db.scalar(
+        select(func.max(Review.round)).where(Review.task_id == task_id)
+    )
+    return int(current or 0) + 1
+
+
+def _assert_reviewer_allowed(
+    db: Session, task: Task, reviewer_account_id: int
+) -> None:
+    membership = pmm.get_membership(db, task.project_id, reviewer_account_id)
+    active = (
+        membership is not None
+        and membership.status == 'active'
+        and (
+            membership.expires_at is None
+            or membership.expires_at > utcnow()
+        )
+        and bool(set(membership.roles or []) & set(REVIEWER_ROLES))
+    )
+    if not active:
+        raise ReviewerNotAllowedError(
+            f'account {reviewer_account_id} is not an active reviewer/manager '
+            f'of project {task.project_id}'
+        )
+    if (
+        task.reviewer_account_id is not None
+        and reviewer_account_id != task.reviewer_account_id
+        and 'manager' not in set(membership.roles or [])
+    ):
+        raise ReviewerNotAllowedError(
+            f'task {task.id} is assigned to reviewer '
+            f'{task.reviewer_account_id}, not {reviewer_account_id}'
+        )
+
+
+def require_reviewer_allowed(db: Session, task: Task, reviewer_account_id: int) -> None:
+    '''公开的复核权限检查（router 逐图复核时复用同一套规则）。'''
+    _assert_reviewer_allowed(db, task, reviewer_account_id)
+
+
+def submit_review(
+    db: Session,
+    task: Task,
+    *,
+    reviewer_account_id: int,
+    decision: str,
+    comment: str | None = None,
+    commit: bool = True,
+) -> Review:
+    if decision not in REVIEW_DECISIONS:
+        raise InvalidReviewDecisionError(
+            f'invalid decision {decision!r}; must be one of {REVIEW_DECISIONS}'
+        )
+    if task.status != 'auto_annotated':
+        raise InvalidTaskTransitionError(task.status, _DECISION_TO_STATUS[decision])
+
+    _assert_reviewer_allowed(db, task, reviewer_account_id)
+
+    images = ti.list_task_images(db, task.id)
+    if not images:
+        raise IncompleteReviewError(f'task {task.id} has no images to review')
+
+    approved = [r for r in images if r.review_status == 'approved']
+    rejected = [r for r in images if r.review_status == 'rejected']
+    undecided = [r for r in images if r.review_status == 'pending']
+
+    if decision == 'approve':
+        if undecided or rejected:
+            raise IncompleteReviewError(
+                f'cannot approve: {len(undecided)} image(s) undecided, '
+                f'{len(rejected)} rejected'
+            )
+    else:
+        if not rejected:
+            raise IncompleteReviewError(
+                f'cannot reject: no image marked rejected '
+                f'({len(approved)} approved, {len(undecided)} undecided)'
+            )
+        not_annotated = [r for r in rejected if r.annotation_status != 'annotated']
+        if not_annotated:
+            raise IncompleteReviewError(
+                f'{len(not_annotated)} rejected image(s) were never annotated'
+            )
+
+    review = Review(
+        task_id=task.id,
+        reviewer_account_id=reviewer_account_id,
+        round=next_round(db, task.id),
+        decision=decision,
+        comment=comment,
+        approved_count=len(approved),
+        rejected_count=len(rejected),
+    )
+    db.add(review)
+    db.flush()
+
+    if decision != 'approve':
+        for row in rejected:
+            ti.apply_revision_bump(db, row)
+            ann.deactivate_current(db, row.id)
+
+    tsk.transition_task(
+        db,
+        task,
+        _DECISION_TO_STATUS[decision],
+        actor_account_id=reviewer_account_id,
+        commit=False,
+    )
+
+    audit.record(
+        db,
+        action='review.created',
+        resource_type='review',
+        resource_id=review.id,
+        actor_account_id=reviewer_account_id,
+        group_id=task.project.group_id if task.project is not None else None,
+        after=audit.snapshot(review),
+    )
+
+    if commit:
+        db.commit()
+        db.refresh(review)
+        _notify_review_outcome(db, task, decision)
+    return review
+
+
+_REVIEW_TITLES = {
+    'approve': '任务已通过复核',
+    'reject_fix': '任务被退回修正',
+    'reject_reannotate': '任务被退回重新标注',
+}
+
+
+def _notify_review_outcome(db: Session, task: Task, decision: str) -> None:
+    '''复核结果通知提交者与被指派人（去重）。'''
+    title = _REVIEW_TITLES.get(decision, '任务复核结果已更新')
+    receivers = {
+        account_id
+        for account_id in (task.submitter_account_id, task.assignee_account_id)
+        if account_id is not None
+    }
+    for account_id in receivers:
+        notif_crud.create(
+            db,
+            account_id,
+            kind='task_review',
+            title=f'{title}：任务 #{task.id}',
+            body=task.name or '(未命名任务)',
+            resource_type='task',
+            resource_id=task.id,
+        )
