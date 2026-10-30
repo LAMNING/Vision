@@ -79,7 +79,7 @@ def main(argv: list[str] | None = None) -> None:
     host = '127.0.0.1' if args.host.lower() == 'localhost' else args.host
     display_host = 'localhost' if host in {'0.0.0.0', '127.0.0.1'} else host
     print(
-        f'[run] {APP_IMPORT} -> http://{display_host}:{args.port}/docs '
+        f'[run] {APP_IMPORT} -> http://{display_host}:{args.port} '
         f'(host={host}, reload={args.reload}, workers={args.workers}, log_level={args.log_level})',
         flush=True,
     )

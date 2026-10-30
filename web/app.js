@@ -12,8 +12,9 @@ const API_BATCH_FILES = 20;
 
 const imageUpload = document.querySelector("#imageUpload");
 const imageDataState = document.querySelector("#imageDataState");
-const uploadZone = document.querySelector(".upload-zone");
-const uploadFeedback = document.querySelector("#uploadFeedback");
+// 拖拽上传挂到整个列表区：原来的 .upload-zone 已经被纯文件表取代
+const uploadZone = document.querySelector(".personal-data");
+const uploadFeedback = document.querySelector("#imageStatus");
 const selectionPanel = document.querySelector("#selectionPanel");
 const selectionTitle = document.querySelector("#selectionTitle");
 const selectedFileList = document.querySelector("#selectedFileList");
@@ -34,6 +35,7 @@ const detailDimensions = document.querySelector("#detailDimensions");
 const detailSize = document.querySelector("#detailSize");
 const detailAnalysis = document.querySelector("#detailAnalysis");
 const detailAnnotate = document.querySelector("#detailAnnotate");
+const detailReview = document.querySelector("#detailReview");
 const deleteImageButton = document.querySelector("#deleteImageButton");
 const sendToGroup = document.querySelector("#sendToGroup");
 const backToImages = document.querySelector("#backToImages");
@@ -42,7 +44,6 @@ const railTeam = document.querySelector("#railTeam");
 const railEnterprise = document.querySelector("#railEnterprise");
 const railAdmin = document.querySelector("#railAdmin");
 const railProfile = document.querySelector("#railProfile");
-const backToUpload = document.querySelector("#backToUpload");
 const dangerDialog = document.querySelector("#dangerDialog");
 const dangerKicker = document.querySelector("#dangerKicker");
 const dangerTitle = document.querySelector("#dangerTitle");
@@ -88,6 +89,13 @@ const confirmLogout = document.querySelector("#confirmLogout");
 const appAccount = document.querySelector("#appAccount");
 const appAvatar = document.querySelector("#appAvatar");
 const appAccountName = document.querySelector("#appAccountName");
+// 顶栏的上下文区：栏目名 / 项目名 / 返回按钮 / 项目角色与归档
+const appBar = document.querySelector(".app-bar");
+const appContextKicker = document.querySelector("#appContextKicker");
+const appContextTitle = document.querySelector("#appContextTitle");
+const projectBack = document.querySelector("#projectBack");
+const projectRole = document.querySelector("#projectRole");
+const projectArchive = document.querySelector("#projectArchive");
 const railSettings = document.querySelector("#railSettings");
 const settingsDialog = document.querySelector("#settingsDialog");
 const closeSettingsDialog = document.querySelector("#closeSettingsDialog");
@@ -97,9 +105,10 @@ const selectAllImages = document.querySelector("#selectAllImages");
 const selectionCount = document.querySelector("#selectionCount");
 const downloadSelected = document.querySelector("#downloadSelected");
 const downloadAnnotated = document.querySelector("#downloadAnnotated");
-const classicAnalyzingCount = document.querySelector("#classicAnalyzingCount");
-const classicCompletedCount = document.querySelector("#classicCompletedCount");
-const classicWaitingCount = document.querySelector("#classicWaitingCount");
+const removeSelected = document.querySelector("#removeSelected");
+const projectImagesMeta = document.querySelector("#projectImagesMeta");
+const projectImageFilter = document.querySelector("#projectImageFilter");
+const projectImageUpload = document.querySelector("#projectImageUpload");
 
 const allDialogs = [...document.querySelectorAll(".dialog-backdrop")];
 
@@ -232,6 +241,20 @@ function syncRail() {
   railSettings.classList.toggle("is-active", !settingsDialog.hidden);
 }
 
+// 每个栏目在顶栏的标题；项目页由 projects.js 自己写（要带项目名与描述）
+const VIEW_CONTEXT = {
+  personal: { kicker: "PERSONAL SPACE", title: "个人空间" },
+  team: { kicker: "TEAM SPACE", title: "小组空间" },
+  enterprise: { kicker: "ENTERPRISE SPACE", title: "企业空间" },
+  admin: { kicker: "PLATFORM ADMIN", title: "平台管理" },
+};
+
+// 顶栏只放栏目名 / 项目名：项目描述按需求不进顶栏，留在项目「设置」里编辑。
+function setAppContext({ kicker, title } = {}) {
+  if (kicker !== undefined) appContextKicker.textContent = kicker;
+  if (title !== undefined) appContextTitle.textContent = title;
+}
+
 function showView(view) {
   currentView = view;
   // 图片详情和标注工作台都是盖在内容区上面的独立层。不先收掉它们，
@@ -244,8 +267,21 @@ function showView(view) {
   document.querySelectorAll(".app-view").forEach((item) => {
     item.hidden = item.dataset.view !== view;
   });
+  // 顶栏：空间栏目显示自己的名字；项目页的标题 / 角色 / 归档由 projects.js 写好，这里只管显示与否
+  const context = VIEW_CONTEXT[view];
+  if (context) {
+    setAppContext({ ...context });
+    projectRole.hidden = true;
+    projectArchive.hidden = true;
+    document.title = `${context.title} · Vision Studio`;
+  } else if (view === "project") {
+    document.title = `${appContextTitle.textContent} · Vision Studio`;
+  }
+  projectBack.hidden = view !== "project";
   // 空间页与项目页都是多栏布局，需要比首页更宽的画布
-  content.classList.toggle("is-wide", ["team", "enterprise", "admin", "project"].includes(view));
+  const wide = ["team", "enterprise", "admin", "project"].includes(view);
+  content.classList.toggle("is-wide", wide);
+  appBar.classList.toggle("is-wide", wide);
   syncRail();
   // 切栏目时收起空间设置抽屉，免得它盖在新页面上
   window.VSProjects?.closeDrawer?.();
@@ -272,8 +308,55 @@ railAdmin.addEventListener("click", () => {
   clearTimeout(railExpandTimer);
   showView("admin");
 });
-// 上传区和图像列表在同一页，这两个按钮改成页内定位
-backToUpload.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+/* ---------------- 图像列表工具条 ---------------- */
+
+if (projectImageUpload) {
+  projectImageUpload.addEventListener("click", () => imageUpload?.click());
+}
+
+if (projectImageFilter) {
+  projectImageFilter.addEventListener("change", () => {
+    imagesLoaded = false;
+    loadImages({ force: true }).catch((error) => {
+      setImageStatus(`筛选失败：${error.message}`, true);
+    });
+  });
+}
+
+if (removeSelected) {
+  removeSelected.addEventListener("click", async () => {
+    const picked = pickedList();
+    if (!picked.length) return;
+    const ok = await window.confirmDanger({
+      kicker: "REMOVE",
+      title: `从项目移除 ${picked.length} 张图片？`,
+      message: "只从当前项目移除，图片仍然留在小组图库里，可以再添加回来。",
+      confirmText: "移除",
+    });
+    if (!ok) return;
+    const projectId = activeProject?.id;
+    if (!projectId) return;
+    removeSelected.disabled = true;
+    let removed = 0;
+    const failures = [];
+    for (const image of picked) {
+      try {
+        await call(() => sdk.removeProjectImage(projectId, image.id));
+        pickedImages.delete(String(image.id));
+        removed += 1;
+      } catch (error) {
+        failures.push(`${image.filename}：${error.message}`);
+      }
+    }
+    imagesLoaded = false;
+    await loadImages({ force: true }).catch(() => {});
+    if (failures.length) {
+      setImageStatus(`已移除 ${removed} 张，${failures.length} 张没成功：${failures[0]}`, true);
+    } else {
+      setImageStatus(`已移除 ${removed} 张`, false);
+    }
+  });
+}
 
 /* ---------------- 弹窗 ---------------- */
 
@@ -505,26 +588,43 @@ function showStatus(title, detail) {
   imageDataState.append(VS.el("strong", "", title), VS.el("p", "", detail));
 }
 
-function classicImageState(imageId) {
-  const state = analysisByImage.get(Number(imageId));
-  if (state?.kind === "result") return { key: "completed", label: "已完成" };
-  if (state?.kind === "task" && ACTIVE_TASK_STATES.has(state.status)) return { key: "analyzing", label: "分析中" };
-  if (state?.kind === "task" && ["auto_annotated", "approved"].includes(state.status)) return { key: "completed", label: "已完成" };
-  if (state?.kind === "task" && state.status === "failed") return { key: "failed", label: "分析失败" };
-  return { key: "waiting", label: "待分析" };
+// 工具条下面那一行灰字：上传结果、筛选失败、移除结果都写这里，不动列表本身
+function setImageStatus(message, error = false) {
+  if (!uploadFeedback) return;
+  uploadFeedback.textContent = message || "";
+  uploadFeedback.classList.toggle("is-error", Boolean(error));
 }
 
-function syncAnalysisCounters() {
-  const totals = { analyzing: 0, completed: 0, waiting: 0 };
-  loadedImages.forEach((image) => {
-    const state = classicImageState(image.id);
-    if (state.key === "completed") totals.completed += 1;
-    else if (state.key === "analyzing") totals.analyzing += 1;
-    else totals.waiting += 1;
-  });
-  classicAnalyzingCount.textContent = String(totals.analyzing);
-  classicCompletedCount.textContent = String(totals.completed);
-  classicWaitingCount.textContent = String(totals.waiting);
+// 「图像」列表的状态文案与配色。stage 由后端按「最该处理的那条任务」算好。
+const IMAGE_STAGE = {
+  none: { label: "未标注", tone: "muted" },
+  pending: { label: "待标注", tone: "wait" },
+  annotated: { label: "待审核", tone: "info" },
+  approved: { label: "已通过", tone: "pass" },
+  rejected: { label: "已退回", tone: "reject" },
+  failed: { label: "标注失败", tone: "reject" },
+};
+
+const REVIEW_TAG = {
+  none: "未审核",
+  pending: "未审核",
+  approved: "已通过",
+  rejected: "已退回",
+};
+
+function stageOf(image) {
+  return IMAGE_STAGE[image.stage] || IMAGE_STAGE.none;
+}
+
+// 后端时间是不带时区的 UTC，浏览器会按本地时区解析，得补个 Z
+function imageWhen(value) {
+  if (!value) return "";
+  const text = String(value);
+  const normalized = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(text) ? text : `${text}Z`;
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (input) => String(input).padStart(2, "0");
+  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function renderImages(images) {
@@ -536,61 +636,205 @@ function renderImages(images) {
     if (!images.some((image) => Number(image.id) === Number(id))) pickedImages.delete(id);
   });
   if (!images.length) {
-    showStatus("还没有图像数据", "上传第一张图片，开始分析与标注。");
+    showStatus("还没有图像数据", "点右上角「上传图片」，选好的图会出现在这里。");
     syncImageToolbar();
-    syncAnalysisCounters();
+    syncImagesMeta();
     return;
   }
 
   imageDataState.classList.remove("empty-state");
   imageDataState.classList.add("image-data-list-wrap");
 
-  const list = document.createElement("div");
-  list.className = "image-list";
-  // 后端按上传顺序返回，列表倒序显示最新的在最上面
-  images.slice().reverse().forEach((image) => {
-    // 行本身是 role=button，不再用 <button> 包着：按钮里不能再嵌 checkbox
-    const row = document.createElement("div");
-    row.className = "image-row";
-    row.dataset.imageId = String(image.id);
-    row.style.setProperty("--row-index", list.children.length);
-    row.tabIndex = 0;
-    row.setAttribute("role", "button");
-    row.setAttribute("aria-label", `打开 ${image.filename}`);
-    row.innerHTML = "<label class=\"image-pick\"><input type=\"checkbox\" aria-label=\"勾选这张图片\" /><span></span></label>"
-      + "<img class=\"image-thumb\" alt=\"\" /><span class=\"image-copy\"><strong></strong><small></small></span>";
-    row.querySelector("strong").textContent = image.filename;
-    const meta = row.querySelector("small");
-    meta.dataset.base = `${image.width || "?"} × ${image.height || "?"} · ${formatSize(image.size_bytes)}`;
-    meta.textContent = `${meta.dataset.base} · ${analysisText(image.id)}`;
-    row.addEventListener("click", () => openImageDetail(image));
-    row.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      openImageDetail(image);
-    });
+  const table = document.createElement("div");
+  table.className = "file-table";
+  table.setAttribute("role", "table");
+  table.setAttribute("aria-label", "项目图片");
 
-    const pick = row.querySelector(".image-pick");
-    const input = pick.querySelector("input");
-    input.checked = pickedImages.has(String(image.id));
-    // 勾选只改变选择状态，不该顺带把详情页打开
-    pick.addEventListener("click", (event) => event.stopPropagation());
-    pick.addEventListener("keydown", (event) => event.stopPropagation());
-    input.addEventListener("change", () => {
-      if (input.checked) pickedImages.add(String(image.id));
-      else pickedImages.delete(String(image.id));
-      row.classList.toggle("is-picked", input.checked);
-      syncImageToolbar();
-    });
-    row.classList.toggle("is-picked", input.checked);
-
-    list.append(row);
-    loadThumbnail(image, row.querySelector(".image-thumb"));
+  const head = document.createElement("div");
+  head.className = "file-row file-head";
+  head.setAttribute("role", "row");
+  [
+    ["file-col-pick", ""],
+    ["file-col-name", "文件名"],
+    ["file-col-meta", "尺寸 / 大小"],
+    ["file-col-status", "标注 / 审核"],
+    ["file-col-task", "任务"],
+    ["file-col-time", "上传时间"],
+    ["file-col-actions", "操作"],
+  ].forEach(([className, text]) => {
+    const cell = el("span", className, text);
+    cell.setAttribute("role", "columnheader");
+    head.append(cell);
   });
-  imageDataState.replaceChildren(list);
+  table.append(head);
+
+  // 后端按上传顺序返回，列表倒序显示最新的在最上面
+  images
+    .slice()
+    .reverse()
+    .forEach((image) => table.append(imageRow(image)));
+
+  imageDataState.replaceChildren(table);
   syncImageToolbar();
-  syncAnalysisCounters();
+  syncImagesMeta();
 }
+
+function imageRow(image) {
+  // 行本身是 role=button，不再用 <button> 包着：按钮里不能再嵌 checkbox
+  const stage = stageOf(image);
+  const row = document.createElement("div");
+  row.className = "file-row";
+  row.dataset.imageId = String(image.id);
+  row.dataset.stage = image.stage || "none";
+  row.tabIndex = 0;
+  row.setAttribute("role", "row");
+  row.setAttribute("aria-label", `打开 ${image.filename}`);
+
+  const pickCell = el("span", "file-col-pick");
+  const pick = el("label", "image-pick");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.setAttribute("aria-label", `勾选 ${image.filename}`);
+  pick.append(input, el("span", ""));
+  pickCell.append(pick);
+
+  const nameCell = el("span", "file-col-name");
+  const thumb = el("img", "file-thumb");
+  thumb.alt = "";
+  const copy = el("span", "file-name-copy");
+  copy.append(
+    el("strong", "", image.filename),
+    el("small", "", image.task_mode === "manual" ? "人工任务" : "")
+  );
+  nameCell.append(thumb, copy);
+
+  const metaCell = el(
+    "span",
+    "file-col-meta",
+    `${image.width || "?"} × ${image.height || "?"} · ${formatSize(image.size_bytes)}`
+  );
+
+  const statusCell = el("span", "file-col-status");
+  const annotateTag = el(
+    "span",
+    `tag tag-${image.annotated ? "pass" : "muted"}`,
+    image.annotated ? "已标注" : "未标注"
+  );
+  const reviewTone =
+    image.review_status === "approved"
+      ? "pass"
+      : image.review_status === "rejected"
+        ? "reject"
+        : "muted";
+  const reviewTag = el(
+    "span",
+    `tag tag-${reviewTone}`,
+    REVIEW_TAG[image.review_status] || "未审核"
+  );
+  statusCell.append(annotateTag, reviewTag);
+
+  const taskCell = el(
+    "span",
+    "file-col-task",
+    image.task_count
+      ? `${image.task_name || `任务 #${image.task_id}`}${image.task_count > 1 ? ` · 共 ${image.task_count} 个任务` : ""}`
+      : "未加入任务"
+  );
+
+  const timeCell = el("span", "file-col-time", imageWhen(image.created_at));
+
+  const actions = el("span", "file-col-actions");
+  if (image.can_review) {
+    const button = el("button", "mini-button is-pass", "审核");
+    button.type = "button";
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openReview(image);
+    });
+    actions.append(button);
+  } else if (image.can_annotate) {
+    const button = el("button", "mini-button is-accent", "标注");
+    button.type = "button";
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      window.VSAnnotate?.open({
+        projectId: activeProject?.id,
+        taskId: image.task_id,
+        taskImageId: image.task_image_id,
+      });
+    });
+    actions.append(button);
+  } else {
+    actions.append(el("span", "file-action-hint", stage.label));
+  }
+
+  row.append(pickCell, nameCell, metaCell, statusCell, taskCell, timeCell, actions);
+  row.addEventListener("click", () => openImageDetail(image));
+  row.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openImageDetail(image);
+  });
+
+  input.checked = pickedImages.has(String(image.id));
+  // 勾选只改变选择状态，不该顺带把详情页打开
+  pick.addEventListener("click", (event) => event.stopPropagation());
+  pick.addEventListener("keydown", (event) => event.stopPropagation());
+  input.addEventListener("change", () => {
+    if (input.checked) pickedImages.add(String(image.id));
+    else pickedImages.delete(String(image.id));
+    row.classList.toggle("is-picked", input.checked);
+    syncImageToolbar();
+  });
+  row.classList.toggle("is-picked", input.checked);
+
+  loadThumbnail(image, thumb);
+  return row;
+}
+
+function openReview(image) {
+  if (!window.VSReview) {
+    showUploadToast("暂时不能复核", "复核面板没有加载，刷新页面后再试");
+    return;
+  }
+  window.VSReview.open({
+    projectId: activeProject?.id,
+    taskId: image.task_id,
+    taskImageId: image.task_image_id,
+    image,
+    onDone: (result) => {
+      image.review_status = result === "rejected" ? "rejected" : "approved";
+      image.stage = result === "rejected" ? "rejected" : "approved";
+      showUploadToast(
+        result === "rejected" ? "已驳回这一张" : "已通过这一张",
+        result === "rejected" ? "标注员会在任务里看到你的原因" : "整批都通过后，去任务列表做任务级裁决"
+      );
+      loadImages({ force: true }).catch(() => {});
+    },
+  });
+}
+
+function syncImagesMeta() {
+  if (!projectImagesMeta) return;
+  const total = loadedImages.length;
+  const filtered = Boolean(currentFilterValue());
+  if (!total) {
+    projectImagesMeta.textContent = filtered ? "没有符合筛选的图片" : "还没有图片";
+    return;
+  }
+  // 筛选时后端已经只返回命中的图，再报「筛出 N / 共 M」会重复
+  const bits = [filtered ? `筛出 ${total} 张` : `共 ${total} 张图片`];
+  if (!filtered) {
+    const waiting = loadedImages.filter((image) => image.stage === "pending").length;
+    const review = loadedImages.filter((image) => image.stage === "annotated").length;
+    const approved = loadedImages.filter((image) => image.stage === "approved").length;
+    if (waiting) bits.push(`${waiting} 张待标注`);
+    if (review) bits.push(`${review} 张待审核`);
+    if (approved) bits.push(`${approved} 张已通过`);
+  }
+  projectImagesMeta.textContent = bits.join(" · ");
+}
+
 
 /* ---------------- 勾选与批量下载 ---------------- */
 
@@ -598,6 +842,10 @@ const pickedImages = new Set();
 
 function pickedList() {
   return loadedImages.filter((image) => pickedImages.has(String(image.id)));
+}
+
+function currentFilterValue() {
+  return projectImageFilter ? projectImageFilter.value : "";
 }
 
 function syncImageToolbar() {
@@ -609,6 +857,10 @@ function syncImageToolbar() {
     ? `已选 ${picked.length} 张${annotated ? ` · 其中 ${annotated} 张有标注` : ""}`
     : "还没有选中图片";
   downloadSelected.disabled = picked.length === 0;
+  if (removeSelected) {
+    removeSelected.disabled = picked.length === 0;
+    removeSelected.textContent = picked.length ? `移除所选 ${picked.length}` : "移除所选";
+  }
   selectAllImages.checked = total > 0 && picked.length === total;
   selectAllImages.indeterminate = picked.length > 0 && picked.length < total;
 }
@@ -616,7 +868,7 @@ function syncImageToolbar() {
 selectAllImages.addEventListener("change", () => {
   pickedImages.clear();
   if (selectAllImages.checked) loadedImages.forEach((image) => pickedImages.add(String(image.id)));
-  document.querySelectorAll(".image-row[data-image-id]").forEach((row) => {
+  document.querySelectorAll(".file-row[data-image-id]").forEach((row) => {
     const on = pickedImages.has(String(row.dataset.imageId));
     row.classList.toggle("is-picked", on);
     const input = row.querySelector(".image-pick input");
@@ -795,7 +1047,13 @@ async function loadImages({ force = false } = {}) {
   imageLoadPromise = (async () => {
     const project = await ensureImageProject();
     const [page] = await Promise.all([
-      call(() => sdk.listProjectImages(project.id, { limit: 200 })),
+      call(() =>
+        sdk.listProjectImages(project.id, {
+          limit: 200,
+          // 空串代表不筛选，后端只认那六个 stage 值
+          stage: currentFilterValue() || undefined,
+        })
+      ),
       loadAnalysisState(project),
     ]);
     const images = Array.isArray(page) ? page : (page.items || []);
@@ -846,10 +1104,6 @@ function analysisText(imageId) {
 }
 
 function updateAnalysisLabels() {
-  document.querySelectorAll(".image-row[data-image-id]").forEach((row) => {
-    const meta = row.querySelector("small");
-    meta.textContent = `${meta.dataset.base} · ${analysisText(row.dataset.imageId)}`;
-  });
   if (currentImage && detailAnalysis) {
     const analysisId = currentImageContext.analysisImageId || currentImage.id;
     const hasState = analysisByImage.has(Number(analysisId));
@@ -858,7 +1112,6 @@ function updateAnalysisLabels() {
       : analysisText(analysisId);
     renderAnnotationOverlay(analysisId);
   }
-  syncAnalysisCounters();
 }
 
 function renderAnnotationOverlay(imageId) {
@@ -961,6 +1214,9 @@ async function loadAnalysisState(project) {
 function scheduleTaskPoll(projectId, taskId, failures = 0) {
   clearTimeout(analysisPollTimer);
   analysisPollTimer = window.setTimeout(async () => {
+    // 已经离开这个项目页（或换到别的栏目）就停手：任务在后台照常跑，
+    // 回来时 loadImages 会重新读一次状态，没必要在别处一直打这个接口。
+    if (currentView !== "project" || !activeProject || activeProject.id !== projectId) return;
     try {
       const task = await call(() => sdk.getTask(projectId, taskId));
       applyTaskState(task);
@@ -990,14 +1246,12 @@ function renderProjectTargets(targets, { unavailable = false } = {}) {
   if (unavailable) {
     targetPlanTitle.textContent = "暂时无法读取识别方案";
     targetPlanDetail.textContent = "仍可在选择图片后手动填写，不影响上传。";
-    syncAnalysisCounters();
     return;
   }
   targetPlanTitle.textContent = targets.length ? targets.join("、") : "尚未设置识别目标";
   targetPlanDetail.textContent = targets.length
     ? `已保存 ${targets.length} 项，置信度 ${formatThreshold(currentBoxThreshold)}，后续上传会自动带出。`
     : "设置一次，后续上传会自动复用。";
-  syncAnalysisCounters();
 }
 
 /* ---------------- 识别目标逐条编辑 ---------------- */
@@ -1313,6 +1567,10 @@ async function openImageDetail(image, options = {}) {
     detailAnnotate.hidden = true;
     detailAnnotate.onclick = null;
   }
+  if (detailReview) {
+    detailReview.hidden = true;
+    detailReview.onclick = null;
+  }
   if (currentView === "project" && activeProject?.id) {
     sdk
       .listImageTasks(activeProject.id, image.id)
@@ -1323,6 +1581,24 @@ async function openImageDetail(image, options = {}) {
           || row.task_status === "rejected_reannotate"
           || (row.task_status === "queued" && row.task_mode === "manual")
         );
+        // 待复核的图（自动跑完 / 人工标完、任务还没裁决）可以直接从详情进复核弹窗
+        const reviewable = (rows || []).find(
+          (row) => row.task_status === "auto_annotated" && row.annotation_status === "annotated"
+        );
+        if (reviewable && detailReview) {
+          detailReview.hidden = false;
+          detailReview.onclick = () => {
+            const projectId = activeProject?.id;
+            closeImageDetail(true);
+            window.VSReview?.open({
+              projectId,
+              taskId: reviewable.task_id,
+              taskImageId: reviewable.task_image_id,
+              image,
+              onDone: () => loadImages({ force: true }).catch(() => {}),
+            });
+          };
+        }
         if (!editable || !detailAnnotate) return;
         detailAnnotate.hidden = false;
         detailAnnotate.onclick = () => {
@@ -1338,6 +1614,8 @@ async function openImageDetail(image, options = {}) {
       .catch(() => {});
   }
   content.hidden = true;
+  // 详情层自带返回/关闭，顶栏在这里只剩重复的项目信息，收起它多给图片一点高度
+  document.body.classList.add("has-layer");
   detailView.hidden = false;
   requestAnimationFrame(() => detailView.classList.add("is-visible"));
 
@@ -1367,12 +1645,14 @@ function closeImageDetail(immediate = false) {
   if (immediate) {
     detailView.hidden = true;
     content.hidden = false;
+    document.body.classList.remove("has-layer");
     return;
   }
   // 等淡出走完再撤掉这一层，否则会看到硬切
   detailCloseTimer = window.setTimeout(() => {
     detailView.hidden = true;
     content.hidden = false;
+    document.body.classList.remove("has-layer");
   }, 180);
 }
 

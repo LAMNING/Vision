@@ -85,6 +85,8 @@
   function openLayer() {
     const view = $("#annotateView");
     $("#contentArea").hidden = true;
+    // 顶栏在这一层里没有意义（返回入口在标注台自己头上），收起来多给画布一点高度
+    document.body.classList.add("has-layer");
     view.hidden = false;
     requestAnimationFrame(() => view.classList.add("is-visible"));
   }
@@ -96,11 +98,13 @@
     if (immediate) {
       view.hidden = true;
       content.hidden = false;
+      document.body.classList.remove("has-layer");
       return;
     }
     window.setTimeout(() => {
       view.hidden = true;
       content.hidden = false;
+      document.body.classList.remove("has-layer");
     }, 180);
   }
 

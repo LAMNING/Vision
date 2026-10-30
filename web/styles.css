@@ -53,10 +53,24 @@ a { color: inherit; text-decoration: none; }
    侧边栏去掉之后页面上没有任何"这是什么产品、我是谁"的信息，
    个人资料里改的展示名称也没有地方体现。这条顶栏补上这两件事，
    同时让"个人与账号"多一个比工具轨图标更直白的入口。 */
-.app-bar { display: flex; width: min(760px, calc(100% - 40px)); margin: 0 auto; align-items: center; justify-content: space-between; gap: 16px; padding-top: 24px; }
-.app-brand { display: flex; align-items: center; gap: 9px; }
-.app-mark { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 8px; color: #fff; background: #171719; font-size: 12px; font-weight: 750; letter-spacing: -.02em; }
-.app-brand-name { font-size: 13px; font-weight: 650; letter-spacing: -.01em; }
+.app-bar { display: flex; width: min(760px, calc(100% - 40px)); margin: 0 auto; align-items: center; justify-content: space-between; gap: 18px; padding-top: 24px; }
+/* 空间页与项目页的画布更宽，顶栏跟着放宽，否则标题与内容对不齐 */
+.app-bar.is-wide { width: min(1080px, calc(100% - 40px)); }
+/* 图片详情 / 标注台这类整层页面打开时收起顶栏：它们自己带返回与标题，
+   顶栏留着只会重复一遍项目上下文，还白占一行高度 */
+body.has-layer .app-bar { display: none; }
+/* 顶栏三段：品牌（含返回）/ 当前上下文标题 / 右侧动作与账号 */
+.app-bar-lead { display: flex; min-width: 0; flex: 0 0 auto; align-items: center; gap: 10px; }
+.app-bar-trail { display: flex; min-width: 0; flex: 0 0 auto; align-items: center; gap: 10px; }
+.app-context { display: grid; min-width: 0; flex: 1 1 auto; align-content: center; gap: 1px; }
+.app-context-kicker { margin: 0; overflow: hidden; color: #a1a1aa; font-size: 9px; font-weight: 750; letter-spacing: .15em; text-overflow: ellipsis; white-space: nowrap; }
+.app-context-title { margin: 0; overflow: hidden; font-size: 18px; font-weight: 650; letter-spacing: -.03em; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.app-context-desc { margin: 1px 0 0; overflow: hidden; color: #8e8e93; font-size: 11.5px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.app-context-desc[hidden], .project-role[hidden], .app-archive[hidden], .app-back[hidden] { display: none; }
+.app-back { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 999px; color: #0071e3; background: rgba(0, 113, 227, .09); cursor: pointer; }
+.app-back:hover { background: rgba(0, 113, 227, .16); }
+.app-back .material-symbols-rounded { font-size: 18px; }
+.app-archive { height: 30px; border-radius: 999px; white-space: nowrap; }
 .app-account { display: flex; align-items: center; gap: 8px; border: 0; border-radius: 999px; background: transparent; padding: 4px 10px 4px 4px; cursor: pointer; }
 .app-account:hover { background: rgba(0, 0, 0, .045); }
 .app-avatar { display: grid; width: 26px; height: 26px; flex: 0 0 auto; place-items: center; overflow: hidden; border-radius: 50%; color: #fff; background: linear-gradient(135deg, #6e6a72, #2e2e31); font-size: 11px; font-weight: 750; }
@@ -160,8 +174,8 @@ a { color: inherit; text-decoration: none; }
 
 /* ---------- 图片列表 ---------- */
 .image-list { display: grid; width: 100%; gap: 1px; overflow: hidden; border: 1px solid #dedee2; border-radius: 16px; background: #dedee2; text-align: left; box-shadow: 0 1px 2px rgba(0, 0, 0, .025); }
-.image-row { position: relative; display: flex; width: 100%; min-height: 72px; align-items: center; gap: 12px; border: 0; background: rgba(255, 255, 255, .94); padding: 8px 42px 8px 10px; cursor: pointer; font: inherit; text-align: left; }
-.image-row:hover { background: #f7f7f8; }
+.image-row { position: relative; display: flex; width: 100%; min-height: 62px; align-items: center; gap: 12px; border: 0; background: rgba(255, 255, 255, .94); padding: 8px 42px 8px 10px; cursor: pointer; font: inherit; text-align: left; }
+.image-row:hover { background: #f6f8fa; }
 .image-thumb { display: block; width: 54px; height: 54px; flex: 0 0 auto; overflow: hidden; border-radius: 9px; background: #f2f2f7; object-fit: cover; }
 .image-copy { display: grid; min-width: 0; gap: 5px; }
 .image-row strong { overflow: hidden; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
@@ -505,8 +519,8 @@ a { color: inherit; text-decoration: none; }
    小组空间（独立整页）
    左上小组信息 / 左下小组聊天 / 右侧小组成果
    ========================================================================== */
-.team-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding: 12px 0 22px; border-bottom: 1px solid #dedee2; }
-.team-head h1 { margin: 0; font-size: clamp(30px, 4vw, 44px); font-weight: 650; letter-spacing: -.05em; line-height: 1.1; }
+/* 标题已经搬进顶栏，这一行只剩切换器与按钮，所以去掉分隔线与大留白 */
+.team-head { display: flex; align-items: flex-end; justify-content: flex-end; gap: 20px; padding: 4px 0 14px; }
 .team-switch { display: flex; align-items: center; gap: 10px; padding-bottom: 3px; }
 .team-switch select { height: 34px; min-width: 160px; max-width: 220px; border: 1px solid #d2d2d7; border-radius: 9px; outline: 0; background: #fff; padding: 0 10px; color: #171719; font: inherit; font-size: 12px; cursor: pointer; }
 .team-switch select:focus { border-color: #0071e3; box-shadow: 0 0 0 3px rgba(0, 113, 227, .12); }
@@ -889,6 +903,7 @@ body.is-leaving .utility-rail { opacity: 0; transform: translate(-22px, -50%); t
    小组空间：成员列 + 成果筛选
    ========================================================================== */
 .member-list { display: grid; margin: 0; padding: 0; list-style: none; gap: 2px; }
+.project-category-list { display: grid; margin: 0; padding: 0; list-style: none; gap: 2px; }
 .member-line { border-radius: 11px; }
 .member-line.is-filtering { background: #eaf3ff; box-shadow: inset 0 0 0 1px #cfe4ff; }
 .member-line-button { display: flex; width: 100%; min-width: 0; align-items: center; gap: 10px; border: 0; border-radius: 11px; background: transparent; padding: 7px 8px; font: inherit; text-align: left; cursor: pointer; transition: background 180ms ease; }
@@ -1241,23 +1256,25 @@ html.has-enterprise .rail-profile-avatar::after { right: -1px; bottom: -1px; wid
 .project-row-go { flex: 0 0 auto; color: #c9c9cf; font-size: 18px; }
 .project-empty { margin-top: 4px; }
 
-/* ---- 项目页头 ---- */
-.project-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 20px; border-bottom: 1px solid #dedee2; padding: 4px 0 18px; }
-.project-head .back-button { grid-column: 1 / -1; justify-self: start; }
-.project-head-main h1 { margin: 0; font-size: clamp(26px, 3vw, 36px); font-weight: 650; letter-spacing: -.04em; line-height: 1.15; }
-.project-desc { margin: 6px 0 0; color: #6e6e73; font-size: 12.5px; line-height: 1.6; }
-.project-head-side { display: flex; align-items: center; gap: 8px; padding-top: 6px; }
+/* ---- 项目页头（标题已移到顶栏，这里只剩角色徽标与页内 Tab） ---- */
 .project-role { border: 1px solid #e6e6eb; border-radius: 999px; padding: 3px 9px; color: #6e6e73; font-size: 10.5px; white-space: nowrap; }
-.project-tabs { margin-top: 14px; }
-/* 项目页里上传区只是「图像」tab 的内容，标题不该压过项目名 */
-.project-view .upload-hero h1 { font-size: clamp(24px, 2.6vw, 32px); }
+.project-tabs { margin-top: 4px; }
+/* 页签带图标，对齐 GitHub 仓库页的 tab 密度 */
+.project-tabs .ent-tab { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; }
+.project-tabs .ent-tab .material-symbols-rounded { flex: 0 0 auto; font-size: 15px; opacity: .85; }
+.project-tabs .ent-tab.is-active .material-symbols-rounded { opacity: 1; }
+/* 页签下面那一条：左边是本页的计数，右边是本页的主操作 */
+.project-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #eaecef; padding: 0 2px 10px; }
+.project-toolbar-meta { margin: 0; color: #6e6e73; font-size: 11.5px; font-variant-numeric: tabular-nums; line-height: 1.5; }
+.project-toolbar + .admin-toolbar, .project-toolbar + .settings-status { margin-top: 12px; }
 .team-switch { flex-wrap: wrap; justify-content: flex-end; }
 .project-pane { display: grid; margin-top: 16px; gap: 16px; }
 .project-pane[hidden] { display: none; }
 
 /* ---- 任务 / 成员 / 类目 ---- */
 .project-task-list { display: grid; }
-.project-task { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #f2f2f5; padding: 10px 2px; }
+.project-task { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #eaecef; border-radius: 6px; margin: 0 -6px; padding: 11px 6px; }
+.project-task:hover { background: #f6f8fa; }
 .project-task:last-child { border-bottom: 0; }
 .project-task-copy { display: grid; min-width: 0; flex: 1 1 auto; gap: 4px; }
 .project-task-copy strong { color: #171719; font-size: 12px; font-weight: 600; }
@@ -1285,11 +1302,12 @@ html.has-enterprise .rail-profile-avatar::after { right: -1px; bottom: -1px; wid
 .task-create-hint { margin: 10px 0 0; border: 1px solid #f0d9b5; border-radius: 10px; background: #fdf8ef; padding: 8px 11px; color: #8a5a00; font-size: 10.5px; line-height: 1.5; }
 .project-task-actions { display: flex; flex: 0 0 auto; gap: 6px; }
 .project-task-done { color: #a1a1aa; font-size: 10.5px; }
-.project-line { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px dashed #f0f0f3; padding: 7px 0; color: #8e8e93; font-size: 11.5px; }
+.project-line { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid #eef0f3; padding: 9px 2px; color: #6e6e73; font-size: 11.5px; font-variant-numeric: tabular-nums; }
 .project-line:last-child { border-bottom: 0; }
 .project-line strong { color: #4d4d52; font-size: 11.5px; font-weight: 600; }
 .project-line.is-muted { border: 0; color: #a1a1aa; }
-.project-member, .project-category { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #f2f2f5; padding: 9px 2px; }
+.project-member, .project-category { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eaecef; border-radius: 6px; margin: 0 -6px; padding: 10px 6px; }
+.project-member:hover, .project-category:hover { background: #f6f8fa; }
 .project-member:last-child, .project-category:last-child { border-bottom: 0; }
 .project-member-copy { display: grid; min-width: 0; flex: 1 1 auto; gap: 2px; }
 .project-member-copy strong { color: #171719; font-size: 12px; font-weight: 600; }
@@ -1359,3 +1377,94 @@ body.is-drawer-open { overflow: hidden; }
 .notif-actions { display: flex; gap: 6px; margin-top: 4px; }
 .notif-empty { margin: 28px 0; color: #8e8e93; font-size: 12px; text-align: center; }
 .notif-more { align-self: center; }
+
+/* ---- 图像 tab：识别方案条 + 纯文件表（澄白 / 基础层） ---- */
+/* 识别方案条：一行说明「按什么目标检测」，右侧是设置入口 */
+.plan-strip { display: flex; align-items: center; gap: 12px; border: 1px solid #e6e6eb; border-radius: 14px; background: #fafafb; padding: 11px 14px; }
+.plan-strip > .material-symbols-rounded { flex: 0 0 auto; color: #33506e; font-size: 19px; }
+.plan-strip-copy { display: grid; min-width: 0; flex: 1 1 auto; gap: 2px; }
+.plan-strip-copy strong { overflow: hidden; color: #171719; font-size: 12px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
+.plan-strip-copy small { overflow: hidden; color: #8e8e93; font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.plan-strip .secondary-button { height: 30px; flex: 0 0 auto; border-radius: 9px; padding: 0 12px; font-size: 11.5px; white-space: nowrap; }
+
+/* 上传结果 / 筛选提示：工具条下面一行小字 */
+.image-status { min-height: 16px; margin: 0; color: #6e6e73; font-size: 11px; line-height: 1.5; }
+.image-status.is-error { color: #b3261e; }
+.image-status:empty { display: none; }
+
+/* 文件表：一行一图，列宽固定，窄屏只保留文件名与操作 */
+.file-table { width: 100%; border: 1px solid #e6e6eb; border-radius: 12px; background: #fff; overflow: hidden; }
+.file-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) 132px 178px 150px 96px 92px; align-items: center; gap: 10px; min-height: 56px; border-bottom: 1px solid #eaecef; padding: 8px 12px; cursor: pointer; transition: background 160ms ease; }
+.file-row:last-child { border-bottom: 0; }
+.file-row:hover { background: #f6f8fa; }
+.file-row:focus-visible { outline: 2px solid rgba(0, 113, 227, .45); outline-offset: -2px; }
+.file-row.is-picked { background: #f2f7ff; }
+.file-row.is-picked:hover { background: #eaf3ff; }
+.file-head { min-height: 38px; border-bottom: 1px solid #eaecef; background: #fafafb; color: #8e8e93; font-size: 10.5px; font-weight: 600; cursor: default; }
+.file-head:hover { background: #fafafb; }
+.file-col-pick { display: grid; place-items: center; }
+.file-col-name { display: flex; min-width: 0; align-items: center; gap: 10px; }
+.file-name-copy { display: grid; min-width: 0; gap: 2px; }
+.file-name-copy strong { overflow: hidden; color: #171719; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.file-name-copy small { overflow: hidden; color: #a1a1aa; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.file-name-copy small:empty { display: none; }
+.file-thumb { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 8px; background: #f2f2f7; object-fit: cover; }
+.file-col-meta, .file-col-time { color: #8e8e93; font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-col-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.file-col-task { overflow: hidden; color: #6e6e73; font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.file-col-actions { display: flex; justify-content: flex-end; }
+.file-action-hint { color: #a1a1aa; font-size: 10.5px; }
+.file-row .image-pick { display: grid; place-items: center; cursor: pointer; }
+.file-row .image-pick input { width: 14px; height: 14px; margin: 0; accent-color: #0071e3; cursor: pointer; }
+
+/* 状态标签：标注 / 审核两枚 */
+.tag { border: 1px solid #e6e6eb; border-radius: 999px; background: #fafafb; padding: 1px 8px; color: #6e6e73; font-size: 10px; font-weight: 600; white-space: nowrap; }
+.tag-pass { border-color: #bfe3c6; background: #f2fbf4; color: #1c7c33; }
+.tag-reject { border-color: #f0c8c4; background: #fdf5f4; color: #b3261e; }
+.tag-wait { border-color: #edd9b0; background: #fdf8ef; color: #8a5a00; }
+.tag-info { border-color: #cfe3fb; background: #f2f8ff; color: #0059b8; }
+.tag-muted { border-color: #e6e6eb; background: #fafafb; color: #8e8e93; }
+
+/* 建任务对话框：「需要审核」开关 */
+.task-review-toggle { display: flex; align-items: flex-start; gap: 9px; margin-top: 12px; border: 1px solid #e6e6eb; border-radius: 12px; background: #fafafb; padding: 10px 12px; cursor: pointer; }
+.settings-form .task-review-toggle { display: flex; }
+.task-review-toggle input { width: 15px; height: 15px; flex: 0 0 auto; margin: 1px 0 0; accent-color: #0071e3; cursor: pointer; }
+.task-review-toggle span { display: grid; gap: 2px; }
+.task-review-toggle strong { color: #171719; font-size: 12px; font-weight: 600; }
+.task-review-toggle small { color: #8e8e93; font-size: 10.5px; line-height: 1.5; }
+
+/* ---- 逐图复核弹窗（澄白 / 基础层） ---- */
+.image-review-dialog { width: min(760px, calc(100vw - 48px)); }
+.review-stage { position: relative; display: grid; margin-top: 12px; border: 1px solid #e6e6eb; border-radius: 12px; background: #f2f2f7; overflow: hidden; }
+.review-stage img { display: block; width: 100%; max-height: 52vh; object-fit: contain; }
+.review-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.review-overlay rect { fill: rgba(0, 113, 227, .08); stroke: #0071e3; stroke-width: 2; }
+.review-overlay text { fill: #04408c; font-size: 13px; font-weight: 650; paint-order: stroke; stroke: #fff; stroke-width: 3; }
+.review-box-list { display: grid; gap: 4px; margin: 12px 0 0; padding: 0; max-height: 148px; overflow-y: auto; list-style: none; }
+.review-box-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid #eef0f3; padding: 6px 2px; font-size: 11.5px; }
+.review-box-row:last-child { border-bottom: 0; }
+.review-box-label { overflow: hidden; color: #171719; text-overflow: ellipsis; white-space: nowrap; }
+.review-box-score { color: #8e8e93; font-variant-numeric: tabular-nums; }
+.review-empty, .review-box-empty { margin: 12px 0 0; color: #a1a1aa; font-size: 11.5px; }
+.review-reason { display: grid; gap: 6px; margin-top: 12px; }
+.review-reason[hidden] { display: none; }
+.review-reason span { color: #6e6e73; font-size: 11px; font-weight: 600; }
+.review-reason textarea { width: 100%; min-height: 68px; resize: vertical; border: 1px solid rgba(0, 0, 0, .1); border-radius: 11px; background: #fff; padding: 9px 11px; color: #1f1f1f; font: inherit; font-size: 12px; line-height: 1.5; }
+.review-reason textarea:focus { outline: 2px solid rgba(0, 113, 227, .35); outline-offset: 1px; border-color: #0071e3; }
+
+/* 窄一点就少显示几列：先收「上传时间」，再收「任务」，文件名和操作始终保留 */
+@media (max-width: 1180px) {
+  .file-row { grid-template-columns: 30px minmax(0, 1fr) 118px 168px 130px 88px; }
+  .file-col-time { display: none; }
+}
+@media (max-width: 940px) {
+  .file-row { grid-template-columns: 28px minmax(0, 1fr) 150px 84px; }
+  .file-col-meta, .file-col-task { display: none; }
+  .file-head .file-col-meta, .file-head .file-col-task { display: none; }
+}
+@media (max-width: 620px) {
+  .file-row { grid-template-columns: 26px minmax(0, 1fr) 78px; padding: 8px 10px; }
+  .file-col-status { display: none; }
+  .plan-strip { flex-wrap: wrap; }
+  .plan-strip .secondary-button { width: 100%; }
+}

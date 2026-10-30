@@ -19,7 +19,7 @@ import pathlib
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 
 from app import database
 
@@ -75,10 +75,34 @@ def needs_stamp() -> bool:
     return 'alembic_version' not in tables and 'account' in tables
 
 
+# create_all() 只会建*缺失的表*，不会给已有表补列。这里维护一份「后来新加的列」
+# 清单：(表名, 列名, 列定义)。启动时按当前库结构检查，缺了才 ALTER TABLE ADD COLUMN。
+# 只加列、不改类型、不加索引——够用且在各方言上都安全（默认值必须是常量）。
+_ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    ('task', 'review_required', 'BOOLEAN NOT NULL DEFAULT 1'),
+)
+
+
+def ensure_columns() -> None:
+    '''给老库补齐 _ADDED_COLUMNS 里的列（幂等，全新库上是空操作）。'''
+    inspector = inspect(database.engine)
+    tables = set(inspector.get_table_names())
+    for table, column, ddl in _ADDED_COLUMNS:
+        if table not in tables:
+            continue
+        existing = {item['name'] for item in inspector.get_columns(table)}
+        if column in existing:
+            continue
+        with database.engine.begin() as conn:
+            conn.execute(text(f'ALTER TABLE {table} ADD COLUMN {column} {ddl}'))
+        logger.warning('已补齐缺失的列：%s.%s（%s）', table, column, ddl)
+
+
 def upgrade_to_head() -> None:
     if not auto_migrate_enabled():
         logger.info('%s 已关闭，退回 create_all() 模式', AUTO_MIGRATE_ENV)
         database.create_all()
+        ensure_columns()
         return
 
     if not alembic_available():
@@ -90,6 +114,7 @@ def upgrade_to_head() -> None:
             SCRIPT_DIR.name,
         )
         database.create_all()
+        ensure_columns()
         return
 
     cfg = alembic_config()
@@ -97,6 +122,7 @@ def upgrade_to_head() -> None:
         logger.warning('检测到老库（无 alembic_version），先 stamp head：%s', database.engine.url)
         command.stamp(cfg, 'head')
     command.upgrade(cfg, 'head')
+    ensure_columns()
     logger.info('数据库迁移完成：%s', database.engine.url)
 
 

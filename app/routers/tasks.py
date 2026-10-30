@@ -159,6 +159,7 @@ def create_task(
         priority=payload.priority,
         due_at=payload.due_at,
         note=payload.note,
+        review_required=payload.review_required,
     )
 
 

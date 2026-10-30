@@ -71,68 +71,38 @@
 
       <main class="main" id="workspace">
         <header class="app-bar">
-          <div class="app-brand">
-            <span class="app-mark" aria-hidden="true">V</span>
-            <span class="app-brand-name">Vision Studio</span>
-            <span class="app-brand-ent" id="brandEnterprise" hidden>
-              <i aria-hidden="true"></i>
-              <strong id="brandEntName">—</strong>
-              <small id="brandEntId">—</small>
-            </span>
-          </div>
-          <button class="app-account" id="appAccount" type="button" aria-label="打开个人与账号">
-            <span class="app-avatar" id="appAvatar" aria-hidden="true">·</span>
-            <span class="app-account-copy"><strong id="appAccountName">参赛成员</strong><small>个人与账号</small></span>
+          <span class="app-brand-ent" id="brandEnterprise" hidden>
+            <strong id="brandEntName">—</strong>
+            <small id="brandEntId">—</small>
+          </span>
+          <button class="app-back" id="projectBack" type="button" aria-label="返回空间" title="返回空间" hidden>
+            <span class="material-symbols-rounded" aria-hidden="true">arrow_back</span>
           </button>
+          <div class="app-context">
+            <p class="app-context-kicker" id="appContextKicker">PERSONAL SPACE</p>
+            <h1 class="app-context-title" id="appContextTitle">个人空间</h1>
+          </div>
+          <div class="app-bar-trail">
+            <span class="project-role" id="projectRole" hidden></span>
+            <button class="secondary-button app-archive" id="projectArchive" type="button" hidden>归档项目</button>
+            <button class="app-account" id="appAccount" type="button" aria-label="打开个人与账号">
+              <span class="app-avatar" id="appAvatar" aria-hidden="true">·</span>
+              <span class="app-account-copy"><strong id="appAccountName">参赛成员</strong><small>个人与账号</small></span>
+            </button>
+          </div>
         </header>
 
         <div class="content" id="contentArea">
           <!-- 上传 -->
           <section class="app-view is-visible" data-view="personal">
             <header class="team-head">
-              <div>
-                <p class="section-kicker">PERSONAL SPACE</p>
-                <h1>个人空间</h1>
-              </div>
               <div class="team-switch">
                 <button class="secondary-button" id="newPersonalProject" type="button">新建项目</button>
               </div>
             </header>
             <div class="project-list" id="personalProjectList"></div>
 
-            <!-- 下面三块在 projects.js 里搬进项目页的「图像」tab -->
-            <section class="hero upload-hero" aria-labelledby="heroTitle">
-              <div>
-                <span class="eyebrow"><i></i> 图像分析与标注</span>
-                <h1 id="heroTitle">选择图片，确认导入。</h1>
-                <p>先加入待分析列表，确认后才会真正上传；可一次选择多张图片。</p>
-              </div>
-              <label class="upload-zone" for="imageUpload">
-                <span class="material-symbols-rounded" aria-hidden="true">cloud_upload</span>
-                <strong>点击选择图片</strong>
-                <small>可多选 · 支持 JPG、PNG、WEBP · 单次最多 50 张</small>
-              </label>
-              <p class="upload-feedback" id="uploadFeedback" aria-live="polite">还未选择文件</p>
-              <input id="imageUpload" type="file" accept="image/jpeg,image/png,image/webp,application/zip,.zip" multiple hidden />
-              <section class="target-plan-card" aria-labelledby="targetPlanTitle">
-                <span class="material-symbols-rounded" aria-hidden="true">target</span>
-                <div>
-                  <small>识别方案 · 图像数据</small>
-                  <strong id="targetPlanTitle">正在读取识别目标…</strong>
-                  <p id="targetPlanDetail">保存后，后续上传会自动复用。</p>
-                </div>
-                <button class="secondary-button" id="openTargetSettings" type="button">设置识别目标</button>
-              </section>
-              <section class="classic-analysis-card" aria-labelledby="classicAnalysisTitle">
-                <div class="classic-card-heading"><span class="material-symbols-rounded" aria-hidden="true">monitoring</span><strong id="classicAnalysisTitle">分析状态</strong></div>
-                <div class="classic-status-grid">
-                  <span><b id="classicAnalyzingCount">0</b><small>分析中</small></span>
-                  <span><b id="classicCompletedCount">0</b><small>已完成</small></span>
-                  <span><b id="classicWaitingCount">0</b><small>待分析</small></span>
-                </div>
-              </section>
-            </section>
-
+            <!-- 下面两块在 projects.js 里搬进项目页的「图像」tab -->
             <section class="section selection-panel" id="selectionPanel" hidden aria-labelledby="selectionTitle">
               <div class="section-heading">
                 <div>
@@ -151,29 +121,45 @@
             </section>
 
             <section class="section personal-data" aria-labelledby="personalDataTitle">
-              <div class="section-heading">
-                <div>
-                  <p class="section-kicker">IMAGE DATA</p>
-                  <h2 id="personalDataTitle">图像数据</h2>
+              <h2 id="personalDataTitle" class="sr-only">图像</h2>
+              <div class="project-toolbar">
+                <p class="project-toolbar-meta" id="projectImagesMeta">—</p>
+                <div class="panel-head-actions">
+                  <select class="task-filter" id="projectImageFilter" aria-label="按状态筛选图片">
+                    <option value="">全部状态</option>
+                    <option value="none">未加入任务</option>
+                    <option value="pending">待标注</option>
+                    <option value="annotated">待审核</option>
+                    <option value="approved">已通过</option>
+                    <option value="rejected">已退回</option>
+                    <option value="failed">标注失败</option>
+                  </select>
+                  <button class="secondary-button" id="projectImageUpload" type="button">上传图片</button>
                 </div>
-                <button class="secondary-button" id="backToUpload" type="button">继续上传</button>
+              </div>
+              <div class="plan-strip">
+                <span class="material-symbols-rounded" aria-hidden="true">target</span>
+                <div class="plan-strip-copy">
+                  <strong id="targetPlanTitle">正在读取识别目标…</strong>
+                  <small id="targetPlanDetail">保存后，后续上传会自动复用。</small>
+                </div>
+                <button class="secondary-button" id="openTargetSettings" type="button">设置识别目标</button>
               </div>
               <div class="image-toolbar" id="imageToolbar" hidden>
                 <label class="toolbar-select"><input type="checkbox" id="selectAllImages" /><span>全选</span></label>
                 <span class="toolbar-count" id="selectionCount">还没有选中图片</span>
                 <button class="secondary-button" id="downloadSelected" type="button" disabled>下载标注图</button>
+                <button class="secondary-button is-reject" id="removeSelected" type="button" disabled>移除所选</button>
               </div>
-              <div class="empty-state" id="imageDataState"><strong>还没有图像数据</strong><p>在上方选择图片并确认分析，结果会出现在这里。</p></div>
+              <p class="image-status" id="imageStatus" aria-live="polite"></p>
+              <div class="empty-state" id="imageDataState"><strong>还没有图像数据</strong><p>点右上角「上传图片」，选好的图会出现在这里。</p></div>
+              <input id="imageUpload" type="file" accept="image/jpeg,image/png,image/webp,application/zip,.zip" multiple hidden />
             </section>
           </section>
 
           <!-- 小组空间：独立整页，左上信息卡 / 右侧小组成果 -->
           <section class="app-view team-view" data-view="team" hidden>
             <header class="team-head">
-              <div>
-                <p class="section-kicker">TEAM SPACE</p>
-                <h1>小组空间</h1>
-              </div>
               <div class="team-switch">
                 <label class="sr-only" for="teamSelect">我的小组</label>
                 <select id="teamSelect" aria-label="切换小组"><option value="">加载中…</option></select>
@@ -234,10 +220,6 @@
           <!-- 企业空间：与企业自有权限模型，左栏信息 + 配额 + 公告 + 成员，右栏图库 / 审核 / 记录 / 日报 -->
           <section class="app-view team-view enterprise-view" data-view="enterprise" hidden>
             <header class="team-head">
-              <div>
-                <p class="section-kicker">ENTERPRISE SPACE</p>
-                <h1>企业空间</h1>
-              </div>
               <div class="team-switch">
                 <span class="ent-id-chip" id="entIdChip" hidden>—</span>
                 <select id="enterpriseSelect" aria-label="切换企业"><option value="">加载中…</option></select>
@@ -328,26 +310,25 @@
 
           <!-- 项目页：从任意空间的项目列表进入，参考 GitHub 仓库页的 tab 结构 -->
           <section class="app-view project-view" data-view="project" hidden>
-            <header class="project-head">
-              <button class="back-button" id="projectBack" type="button">← 返回空间</button>
-              <div class="project-head-main">
-                <p class="section-kicker" id="projectGroupLabel">PROJECT</p>
-                <h1 id="projectName">—</h1>
-                <p class="project-desc" id="projectDesc"></p>
-              </div>
-              <div class="project-head-side">
-                <span class="project-role" id="projectRole"></span>
-                <button class="secondary-button" id="projectArchive" type="button" hidden>归档项目</button>
-              </div>
-            </header>
-
             <div class="ent-tabs project-tabs" role="tablist" aria-label="项目视图">
-              <button class="ent-tab is-active" type="button" role="tab" aria-selected="true" data-project-tab="overview">概览</button>
-              <button class="ent-tab" type="button" role="tab" aria-selected="false" data-project-tab="images">图像</button>
-              <button class="ent-tab" type="button" role="tab" aria-selected="false" data-project-tab="tasks">任务</button>
-              <button class="ent-tab" type="button" role="tab" aria-selected="false" data-project-tab="members">成员</button>
-              <button class="ent-tab" type="button" role="tab" aria-selected="false" data-project-tab="categories">类目</button>
-              <button class="ent-tab" type="button" role="tab" aria-selected="false" data-project-tab="settings">设置</button>
+              <button class="ent-tab is-active" type="button" role="tab" aria-selected="true" data-project-tab="overview">
+                <span class="material-symbols-rounded" aria-hidden="true">space_dashboard</span>概览
+              </button>
+              <button class="ent-tab" type="button" role="tab" aria-selected="false" data-project-tab="images">
+                <span class="material-symbols-rounded" aria-hidden="true">image</span>图像
+              </button>
+              <button class="ent-tab" type="button" role="tab" aria-selected="false" data-project-tab="tasks">
+                <span class="material-symbols-rounded" aria-hidden="true">task_alt</span>任务
+              </button>
+              <button class="ent-tab" type="button" role="tab" aria-selected="false" data-project-tab="members">
+                <span class="material-symbols-rounded" aria-hidden="true">group</span>成员
+              </button>
+              <button class="ent-tab" type="button" role="tab" aria-selected="false" data-project-tab="categories">
+                <span class="material-symbols-rounded" aria-hidden="true">label</span>类目
+              </button>
+              <button class="ent-tab" type="button" role="tab" aria-selected="false" data-project-tab="settings">
+                <span class="material-symbols-rounded" aria-hidden="true">settings</span>设置
+              </button>
             </div>
 
             <section class="project-pane" data-project-pane="overview">
@@ -366,8 +347,8 @@
 
             <section class="project-pane" data-project-pane="tasks" hidden>
               <article class="panel admin-panel">
-                <div class="panel-head">
-                  <div><h3>任务</h3><p class="panel-sub" id="projectTasksMeta">—</p></div>
+                <div class="project-toolbar">
+                  <p class="project-toolbar-meta" id="projectTasksMeta">—</p>
                   <div class="panel-head-actions">
                     <select id="projectTaskFilter" class="task-filter" aria-label="按状态筛选任务">
                       <option value="">全部状态</option>
@@ -391,8 +372,8 @@
 
             <section class="project-pane" data-project-pane="members" hidden>
               <article class="panel admin-panel">
-                <div class="panel-head">
-                  <div><h3>成员</h3><p class="panel-sub" id="projectMembersMeta">—</p></div>
+                <div class="project-toolbar">
+                  <p class="project-toolbar-meta" id="projectMembersMeta">—</p>
                 </div>
                 <div class="admin-toolbar">
                   <input id="projectMemberName" type="search" maxlength="30" placeholder="输入用户名添加成员" aria-label="成员用户名" />
@@ -412,11 +393,8 @@
                  从「设置」里提出来单独一页，别和归档这种运维项挤在一起。 -->
             <section class="project-pane" data-project-pane="categories" hidden>
               <article class="panel admin-panel">
-                <div class="panel-head">
-                  <div>
-                    <h3>识别类目</h3>
-                    <p class="panel-sub" id="projectCategoriesMeta">自动标注按这些类目检测，人工标注从这里取色板。</p>
-                  </div>
+                <div class="project-toolbar">
+                  <p class="project-toolbar-meta" id="projectCategoriesMeta">自动标注按这些类目检测，人工标注从这里取色板。</p>
                 </div>
                 <div class="admin-toolbar">
                   <input id="projectNewCategory" type="search" maxlength="50" placeholder="新增类目（中文名）" aria-label="新增类目" />
@@ -461,10 +439,6 @@
           <!-- 平台管理：只有 platform_role=admin 能看到入口，页面自身再校验一次 -->
           <section class="app-view team-view admin-view" data-view="admin" hidden>
             <header class="team-head">
-              <div>
-                <p class="section-kicker">PLATFORM ADMIN</p>
-                <h1>平台管理</h1>
-              </div>
               <div class="team-switch">
                 <span class="admin-role-chip">平台管理员</span>
                 <button class="secondary-button" id="adminRefresh" type="button">刷新当前页</button>
@@ -660,6 +634,7 @@
                 <div><dt>分析状态</dt><dd id="detailAnalysis">等待提交分析</dd></div>
               </dl>
               <button class="secondary-button wide-button" id="detailAnnotate" type="button" hidden>在标注台打开</button>
+              <button class="secondary-button wide-button" id="detailReview" type="button" hidden>审核这张</button>
               <button class="secondary-button wide-button" id="downloadAnnotated" type="button">下载标注图</button>
               <button class="secondary-button wide-button" id="sendToGroup" type="button">上传到小组库</button>
               <button class="delete-button" id="deleteImageButton" type="button">删除图片</button>
@@ -1116,16 +1091,44 @@
           <div class="task-pick-head">
             <span class="task-pick-title">图片范围 <b id="taskPickCount">—</b></span>
             <span class="task-pick-actions">
+              <button class="text-button" id="taskPickUnannotated" type="button">只选未标注</button>
               <button class="text-button" id="taskPickAll" type="button">全选</button>
               <button class="text-button" id="taskPickNone" type="button">全不选</button>
             </span>
           </div>
           <div class="task-pick-list" id="taskPickList"></div>
+          <label class="task-review-toggle">
+            <input type="checkbox" id="taskReviewRequired" checked />
+            <span><strong>需要审核</strong><small>标完进复核队列；取消勾选则标注完成后直接通过。</small></span>
+          </label>
           <p class="task-create-hint" id="taskCreateHint" hidden></p>
           <div class="settings-actions">
             <p class="settings-status" id="taskCreateStatus" role="status"></p>
             <button class="primary-button" id="taskCreateSubmit" type="button">创建任务</button>
           </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 逐图复核：从「图像」tab 的行内「审核」打开 -->
+    <div class="dialog-backdrop" id="imageReviewDialog" hidden>
+      <section class="dialog settings-dialog image-review-dialog" role="dialog" aria-modal="true" aria-labelledby="imageReviewTitle">
+        <button class="dialog-close" id="closeImageReview" type="button" aria-label="关闭">×</button>
+        <p class="section-kicker">REVIEW</p>
+        <h2 id="imageReviewTitle">审核标注</h2>
+        <p class="dialog-description" id="imageReviewSummary">逐图复核，通过或写明要改的地方</p>
+        <div class="review-stage" id="imageReviewStage">
+          <img id="imageReviewImage" alt="待复核的图片" />
+        </div>
+        <ul class="review-box-list" id="imageReviewBoxes"></ul>
+        <label class="review-reason" id="imageReviewReasonWrap" hidden>
+          <span>驳回原因</span>
+          <textarea id="imageReviewReason" rows="2" maxlength="255" placeholder="写清楚要改什么，标注员会看到"></textarea>
+        </label>
+        <p class="settings-status" id="imageReviewStatus" role="status"></p>
+        <div class="settings-actions">
+          <button class="secondary-button is-reject" id="imageReviewReject" type="button">驳回</button>
+          <button class="primary-button" id="imageReviewApprove" type="button">通过</button>
         </div>
       </section>
     </div>
@@ -1154,6 +1157,7 @@
     <script src="admin.js"></script>
     <script src="projects.js"></script>
     <script src="annotate.js"></script>
+    <script src="review.js"></script>
     <script src="notifications.js"></script>
   </body>
 </html>

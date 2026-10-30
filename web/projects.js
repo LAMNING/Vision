@@ -37,11 +37,12 @@
   /* ---------------- 把旧面板搬进新容器 ---------------- */
 
   function relocate() {
-    // 个人空间的上传 / 选择 / 图像列表 → 项目页「图像」tab
+    // 个人空间的选择区 / 图像列表 → 项目页「图像」tab
+    // （原来的 .upload-hero 已经删掉，「图像分析与标注」大标题不再存在）
     const imagesPane = $("#projectImagesPane");
     const personal = document.querySelector('[data-view="personal"]');
     if (imagesPane && personal) {
-      [personal.querySelector(".upload-hero"), $("#selectionPanel"), personal.querySelector(".personal-data")]
+      [personal.querySelector("#selectionPanel"), personal.querySelector(".personal-data")]
         .filter(Boolean)
         .forEach((node) => imagesPane.append(node));
     }
@@ -194,10 +195,12 @@
     taskPickImages = [];
     if ($("#projectTaskFilter")) $("#projectTaskFilter").value = "";
 
-    $("#projectName").textContent = project.name;
-    $("#projectDesc").textContent = project.description || "暂无描述";
-    $("#projectGroupLabel").textContent = `${SPACE_LABEL[labelOf(project)]} · ${groupLabel(project)}`;
+    // 标题区已经挪到顶栏（#appContextTitle / #appContextKicker）
+    // 项目描述按需求从顶栏撤掉了，只留在「设置」里编辑
+    $("#appContextTitle").textContent = project.name;
+    $("#appContextKicker").textContent = `${SPACE_LABEL[labelOf(project)]} · ${groupLabel(project)}`;
     $("#projectRole").textContent = ROLE_LABEL[project.role] || project.role || "";
+    $("#projectRole").hidden = false;
     $("#projectArchive").hidden = !project.can_manage || project.status !== "active";
     $("#projectDangerArchive").disabled = !project.can_manage;
 
@@ -362,9 +365,14 @@
     ]);
     const names = await memberNames();
     const visible = taskFilter ? tasks.filter((task) => task.status === taskFilter) : tasks;
-    $("#projectTasksMeta").textContent = taskFilter
-      ? `共 ${tasks.length} 个任务 · 当前筛出 ${visible.length} 个`
-      : `共 ${tasks.length} 个任务`;
+    // 工具行左边只放计数，像 GitHub 仓库页的「1 Branch · 0 Tags」那样一口气说完状态
+    const metaBits = [`共 ${tasks.length} 个任务`];
+    if (taskFilter) metaBits.push(`筛出 ${visible.length} 个`);
+    const waitingAnnotate = visible.filter((task) => task.status === "queued").length;
+    const waitingReview = visible.filter((task) => task.status === "auto_annotated").length;
+    if (waitingAnnotate) metaBits.push(`${waitingAnnotate} 个待标注`);
+    if (waitingReview) metaBits.push(`${waitingReview} 个待复核`);
+    $("#projectTasksMeta").textContent = metaBits.join(" · ");
     const box = $("#projectTaskList");
     box.replaceChildren();
     if (!tasks.length) {
@@ -518,6 +526,9 @@
     list.replaceChildren();
     taskPickImages.forEach((image) => {
       const item = el("label", "task-pick-item");
+      item.dataset.imageId = String(image.id);
+      // 「只选未标注」靠这个标记筛：已经标过（或标完待审核）的图默认不选
+      item.dataset.annotated = image.annotated ? "1" : "";
       const box = el("input", "task-pick-box");
       box.type = "checkbox";
       box.value = String(image.id);
@@ -530,6 +541,19 @@
       );
       list.append(item);
     });
+    updatePickCount();
+  }
+
+  /** 「只选未标注」：把已经标注过的图片取消勾选，方便直接建一个补标任务。 */
+  function pickUnannotated() {
+    document.querySelectorAll("#taskPickList .task-pick-item").forEach((item) => {
+      const box = item.querySelector(".task-pick-box");
+      if (!box) return;
+      box.checked = !item.dataset.annotated;
+    });
+    const picked = pickedImageIds().length;
+    if (!picked) status("#taskCreateStatus", "这些图片都已经标注过了，没有可补标的", true);
+    else status("#taskCreateStatus", `已选中 ${picked} 张还没标注的图片`);
     updatePickCount();
   }
 
@@ -567,6 +591,8 @@
     }
     const mode = chosenMode();
     const kind = mode === "manual" ? "人工标注" : "自动标注";
+    const reviewNode = $("#taskReviewRequired");
+    const reviewRequired = reviewNode ? reviewNode.checked : true;
     const button = $("#taskCreateSubmit");
     button.disabled = true;
     status("#taskCreateStatus", "正在创建…");
@@ -575,11 +601,13 @@
         name: $("#taskCreateName").value.trim() || undefined,
         imageIds,
         mode,
+        reviewRequired,
       }));
       // 建出来还是 draft，这里顺手提交，省掉「建完再去列表里点提交」这一步。
       const task = await call(() => sdk.submitTask(current.id, created.id));
       closeDialog($("#taskCreateDialog"));
-      status("#projectTaskStatus", `已提交${kind}任务「${task.name || `任务 #${task.id}`}」，共 ${imageIds.length} 张图片`);
+      const tail = reviewRequired ? "，标完进复核队列" : "，标完直接通过";
+      status("#projectTaskStatus", `已提交${kind}任务「${task.name || `任务 #${task.id}`}」，共 ${imageIds.length} 张图片${tail}`);
       loaded.overview = false;
       await loadTasks();
     } catch (error) {
@@ -685,9 +713,15 @@
     }
     const meta = $("#projectCategoriesMeta");
     if (meta) {
-      meta.textContent = categories.length
-        ? `共 ${categories.length} 个类目 · 自动标注按这些类目检测（填了英文就用英文，留空自动翻译），人工标注从这里取色板`
-        : "还没有类目，先加一个再建任务。";
+      if (!categories.length) {
+        meta.textContent = "还没有类目，先加一个再建任务。";
+      } else {
+        const on = categories.filter((item) => item.enabled !== false).length;
+        const translated = categories.filter((item) => !item.en_name).length;
+        const bits = [`共 ${categories.length} 个类目`, `${on} 个启用`];
+        if (translated) bits.push(`${translated} 个留空自动翻译`);
+        meta.textContent = bits.join(" · ");
+      }
     }
     loaded.categories = true;
   }
@@ -710,7 +744,7 @@
         default_reviewer: $("#projectReviewerInput").value,
       }));
       current = { ...current, ...updated };
-      $("#projectName").textContent = current.name;
+      $("#appContextTitle").textContent = current.name;
       $("#projectDesc").textContent = current.description || "暂无描述";
       status("#projectSettingsStatus", "已保存");
       loaded.overview = false;
@@ -841,6 +875,7 @@
   $("#projectNewTask").addEventListener("click", openTaskCreate);
   $("#taskPickAll").addEventListener("click", () => pickAll(true));
   $("#taskPickNone").addEventListener("click", () => pickAll(false));
+  $("#taskPickUnannotated")?.addEventListener("click", pickUnannotated);
   $("#taskCreateSubmit").addEventListener("click", submitTaskCreate);
   $("#closeTaskCreate").addEventListener("click", () => closeDialog($("#taskCreateDialog")));
   $("#projectTaskFilter").addEventListener("change", () => {

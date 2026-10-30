@@ -8,9 +8,17 @@ from app.data.crud.project import get_project_or_raise
 from app.data.crud.project_category import list_categories
 
 
-def _annotation_base(db: Session, project_id: int):
+def _annotation_agg(project_id: int, *columns):
+    """标注聚合的公共骨架：显式从 Annotation 起手，再逐个 join 到任务。
+
+    以前这里是 `select(...).select_from(base.subquery())`，但列仍然引用
+    Annotation 实体 —— SQLAlchemy 会把 annotation 表再塞进 FROM，
+    和那个子查询形成笛卡尔积：每条统计都被放大成「条数 × 条数」倍。
+    直接从 Annotation 起手 join，才是唯一一条 JOIN 链。
+    """
     return (
-        select(Annotation)
+        select(*columns)
+        .select_from(Annotation)
         .join(TaskImage, TaskImage.id == Annotation.task_image_id)
         .join(Task, Task.id == TaskImage.task_id)
         .where(
@@ -52,21 +60,18 @@ def project_stats(db: Session, project_id: int) -> dict:
         or 0
     )
 
-    base = _annotation_base(db, project_id)
     annotations_current = int(
-        db.scalar(select(func.count()).select_from(base.subquery())) or 0
+        db.scalar(_annotation_agg(project_id, func.count())) or 0
     )
 
     source_rows = db.execute(
-        select(Annotation.source, func.count())
-        .select_from(base.subquery())
+        _annotation_agg(project_id, Annotation.source, func.count())
         .group_by(Annotation.source)
     ).all()
     annotations_by_source = {str(s): int(c) for s, c in source_rows}
 
     category_rows = db.execute(
-        select(Annotation.category_id, func.count())
-        .select_from(base.subquery())
+        _annotation_agg(project_id, Annotation.category_id, func.count())
         .group_by(Annotation.category_id)
     ).all()
     names = {
@@ -85,8 +90,7 @@ def project_stats(db: Session, project_id: int) -> dict:
     ]
 
     day_rows = db.execute(
-        select(func.date(Annotation.created_at), func.count())
-        .select_from(base.subquery())
+        _annotation_agg(project_id, func.date(Annotation.created_at), func.count())
         .group_by(func.date(Annotation.created_at))
         .order_by(func.date(Annotation.created_at))
     ).all()

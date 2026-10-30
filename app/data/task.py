@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import BasicModel
@@ -81,6 +81,11 @@ class Task(BasicModel):
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     due_at: Mapped[datetime | None] = mapped_column(DateTime)
     note: Mapped[str | None] = mapped_column(String(500))
+
+    # 标注完成后是否还要人工复核：关掉时标注一结束就自动通过（见 crud.review.auto_approve）
+    review_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text('1')
+    )
 
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_message: Mapped[str | None] = mapped_column(Text)

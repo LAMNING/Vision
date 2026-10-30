@@ -16,12 +16,13 @@
 - `login.html` / `login.css` / `auth.js`：登录、注册与进入动画。
 - `index.html` / `styles.css`：个人 / 团队 / 企业三个空间的项目列表、项目页、平台管理、资料和统一弹窗界面；`styles.css` 保留「澄白」主题原样。
 - `theme.js` / `themes.css`：双主题切换、侧栏收起状态与「晴蓝」Material 3 外观层。
-- `app.js`：上传、分析、图像列表、详情和删除。
+- `app.js`：上传、图像文件表（标注 / 审核标签、行内操作）、图片详情与删除。
 - `team.js`：小组、成员、小组成果和聊天客户端。
 - `settings.js`：设置弹窗的三节（个人资料与头像 / 外观与主题 / 账号安全）。侧栏「个人与账号」和「设置」打开的是同一个弹窗，各自定位到对应一节。
 - `admin.js`：平台管理页（概览、账号与平台角色、重置密码、小组 / 项目、审计、存储与模型）。
 - `projects.js`：三个空间的项目列表、项目页六个 tab（概览 / 图像 / 任务 / 成员 / 类目 / 设置）、新建任务对话框、空间设置抽屉。
 - `annotate.js`：人工标注工作台（左选图 / 中画框 / 右选类目），负责拉取任务图片、编辑 bbox 并以整组覆盖的方式保存，最后「完成标注 / 重新提交 / 重新排队」。
+- `review.js`：单图复核弹窗（图像 tab 每行的「审核」）。拉这一张的标注框画在图上，逐张「通过 / 驳回」，驳回必须写原因（标注员会照着改）。
 - `notifications.js`：通知中心（左栏「通知」+ 右侧抽屉）。轮询未读数显示徽标，按 `resource_type` 跳转：`task` 打开任务所在项目，`invitation` 行内直接「接受 / 拒绝」。
 - `core.js`：后端地址、SDK 实例、错误翻译和公共工具。
 - `sdk.js`：FastAPI 接口封装。
@@ -36,7 +37,7 @@
 
 ## 外观主题
 
-- **经典**（默认）：紧凑工作台。复用 Material 组件层，项目页的「图像」tab 排成「上传区 + 识别方案 / 分析状态 + 图像列表」，动效更短。
+- **经典**（默认）：紧凑工作台。复用 Material 组件层，行高、图标与圆角都更小，动效更短。
 - **晴蓝**：宽松 Material 3 方向，桌面端使用常驻且可收起的左侧导航，窄屏使用底部导航。
 - **澄白**：保留重构前的极简界面与悬浮工具轨。
 
@@ -180,3 +181,10 @@ python -m http.server 8125 --bind 127.0.0.1
 - 「识别方案」对话框同时管两件事：把填写的目标同步成项目类目（新增 / 修改 / 删除），以及置信度阈值 `box_threshold`（滑块 0.05–0.95，默认 0.30，`PATCH /projects/{id}/auto-config`）。上传后分析走的 `syncAnalysisConfig()` **不传**阈值，避免上传动作悄悄改掉老项目的设置；只有在这个对话框里按「保存识别方案」才会写。
 - 目标是一条一条编辑的（`#targetRows` 里每行 `中文名 | 英文提示词 | ×`）：中文名只用于界面显示，英文提示词才是喂给模型的检测口径，留空则保存时由后端按中文名自动翻译（`create_category` / `update_category` 里 `en_name` 传空串即触发翻译）。保存时按行比对——没有 `id` 的新建，改过的 PATCH，从列表里删掉的 DELETE；中文名重复在提交前就拦下。
 - 阈值的作用点在推理之后：一次推理用所有类目里最小的那个阈值取框，再按每个类目的 `threshold_override` / 全局值过滤，最后做跨类目去重（IoU ≥ 0.8，同类目 IoU ≥ 0.6）。所以调高阈值只会少框，不会变快。
+- 项目页版式参考 GitHub 仓库页：页签带图标（`space_dashboard` / `image` / `task_alt` / `group` / `label` / `settings`），每个 tab 里第一条是 `.project-toolbar`（左边只有计数，用 ` · ` 串起来，例如「共 12 个任务 · 3 个待标注 · 2 个待复核」；右边是本页的主操作）。列表行统一成 GitHub 的文件行：1px `#eaecef` 细分隔线、`margin: 0 -6px` 让 hover 底色超出文字、`:hover` 变浅底（晴蓝/经典用 `#f5f9ff`）。
+- 「图像」tab 是纯文件表（`.file-table`），没有「分析」大标题：上方一条 `.plan-strip` 显示当前识别方案并直达「设置识别目标」，右侧「上传图片」；列表每行是 `勾选 | 缩略图+文件名 | 尺寸·大小 | 标注/审核标签 | 任务 | 上传时间 | 操作`。标签反映的是这张图在项目任务里的状态：`未标注 / 待标注 / 已标注(待审核) / 已通过 / 已退回 / 标注失败`，审核标签是 `未审核 / 已通过 / 已退回`。
+- 每行的操作按钮由后端算好的两个布尔决定：`can_review` → 「审核」（开 `review.js` 的复核弹窗，可直接看图 + 框 + 通过/驳回，驳回必填原因）；`can_annotate` → 「标注」（带着 `taskImageId` 直接进标注台定位到这张图）；两者都没有时显示一行灰字说明当前状态。
+- `GET /projects/{id}/images` 返回 `ProjectImageRead`：在 `ImageRead` 之上加了 `stage` / `annotated` / `review_status` / `task_count` / `task_id` / `task_name` / `task_mode` / `task_image_id` / `can_annotate` / `can_review`。`stage` 是聚合出来的单值（`none|pending|annotated|approved|rejected|failed`），一张图落在多个任务里时按「可编辑 > 已通过 > 已退回 > 可审核 > 已标注 > 失败 > 待标注」取最高优先的那条，并带上它的 `task_id` / `task_image_id`。列表支持 `?stage=` 直接筛这一列。
+- 「移除所选」只删 `ProjectImage` 关联（`DELETE /projects/{id}/images/{image_id}`），图片仍在小组图库里，可以再添加回来。
+- 新建任务对话框：可以只勾「只选未标注」（`stage` 为 `none` / `pending` 的图），并可选「需要审核」。不要求审核时后端在任务标完（自动或人工点「完成标注」）后走 `review_crud.auto_approve()` 直接置为 `approved`，不发给评审人；这个字段存在 `Task.review_required`（默认 `true`），老库由 `app/migrations.py` 的 `ensure_columns()` 补列。
+- 项目描述不进顶栏：顶栏只放栏目名 / 项目名，描述在「设置」里改名时一起编辑。

@@ -493,8 +493,10 @@
 
     // ---- 项目图片 ----
 
-    listProjectImages(projectId, { offset = 0, limit = 50 } = {}) {
-      return this._json('GET', `/projects/${projectId}/images`, { params: { offset, limit } });
+    listProjectImages(projectId, { offset = 0, limit = 50, stage } = {}) {
+      const params = { offset, limit };
+      if (stage) params.stage = stage;
+      return this._json('GET', `/projects/${projectId}/images`, { params });
     }
 
     /** 批量上传：files 为 File/Blob 数组或 [{filename, data, type}]。 */
@@ -699,10 +701,11 @@
 
     /**
      * 建任务。mode='auto' 走模型自动标注；mode='manual' 交给标注员在标注工作台里画框。
+     * reviewRequired=false：标完直接通过，不进复核队列。
      * dueAt 用 ISO 字符串（后端是 naive UTC）。
      */
-    createTask(projectId, { name, reviewerAccountId, imageIds, mode = 'auto', assigneeAccountId, priority = 0, dueAt, note } = {}) {
-      const payload = { project_id: projectId, name, mode, priority };
+    createTask(projectId, { name, reviewerAccountId, imageIds, mode = 'auto', assigneeAccountId, priority = 0, dueAt, note, reviewRequired = true } = {}) {
+      const payload = { project_id: projectId, name, mode, priority, review_required: Boolean(reviewRequired) };
       if (reviewerAccountId != null) payload.reviewer_account_id = reviewerAccountId;
       if (imageIds && imageIds.length) payload.image_ids = imageIds;
       if (assigneeAccountId != null) payload.assignee_account_id = assigneeAccountId;

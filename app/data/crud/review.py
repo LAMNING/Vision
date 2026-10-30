@@ -162,6 +162,72 @@ def submit_review(
     return review
 
 
+def auto_approve(
+    db: Session,
+    task: Task,
+    *,
+    actor_account_id: int | None = None,
+    comment: str = '创建任务时未要求复核，标注完成即自动通过',
+    commit: bool = True,
+) -> Review | None:
+    '''「不需要审核」的任务：标注完成后直接通过。
+
+    逐图补一条 approve（不留复核人，`reviewed_by_account_id = NULL`），
+    再写一条 approve 的 Review 记录，这样历史里仍然能看到它是怎么通过的。
+    若还有图没标完 / 任务不在 auto_annotated，就什么都不做，交给正常复核流程。
+    '''
+    if task.status != 'auto_annotated' or task.review_required:
+        return None
+
+    images = ti.list_task_images(db, task.id)
+    if not images:
+        return None
+    if any(row.annotation_status != 'annotated' for row in images):
+        return None
+
+    actor = actor_account_id if actor_account_id is not None else task.submitter_account_id
+    for row in images:
+        if row.review_status != 'approved':
+            ti.set_review(
+                db,
+                row,
+                approved=True,
+                reviewer_account_id=None,
+                commit=False,
+            )
+
+    review = Review(
+        task_id=task.id,
+        reviewer_account_id=actor,
+        round=next_round(db, task.id),
+        decision='approve',
+        comment=comment,
+        approved_count=len(images),
+        rejected_count=0,
+    )
+    db.add(review)
+    db.flush()
+
+    tsk.transition_task(
+        db, task, 'approved', actor_account_id=actor, commit=False
+    )
+    audit.record(
+        db,
+        action='review.auto_approved',
+        resource_type='review',
+        resource_id=review.id,
+        actor_account_id=actor,
+        group_id=task.project.group_id if task.project is not None else None,
+        after={'decision': 'approve', 'images': len(images)},
+    )
+
+    if commit:
+        db.commit()
+        db.refresh(review)
+        _notify_review_outcome(db, task, 'approve')
+    return review
+
+
 _REVIEW_TITLES = {
     'approve': '任务已通过复核',
     'reject_fix': '任务被退回修正',

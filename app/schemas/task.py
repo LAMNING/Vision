@@ -54,6 +54,8 @@ class TaskCreate(InputModel):
     priority: int = Field(default=0, ge=0, le=2)
     due_at: datetime | None = None
     note: str | None = Field(default=None, max_length=500)
+    # False = 标完直接通过，不进复核；True 走原来的逐图复核 + 任务级裁决
+    review_required: bool = True
 
     @field_validator('image_ids')
     @classmethod
@@ -86,6 +88,7 @@ class TaskRead(ORMModel):
     retry_count: int
     error_message: str | None
     version: int
+    review_required: bool = True
     created_at: datetime
     completed_at: datetime | None
 

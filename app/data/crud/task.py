@@ -332,6 +332,7 @@ def create_task(
     priority: int = 0,
     due_at: datetime | None = None,
     note: str | None = None,
+    review_required: bool = True,
     commit: bool = True,
 ) -> Task:
     project = pj.get_archivable_project(db, project_id)
@@ -363,6 +364,7 @@ def create_task(
         priority=priority,
         due_at=due_at,
         note=_clean_note(note),
+        review_required=bool(review_required),
     )
     db.add(task)
     db.flush()
@@ -563,6 +565,15 @@ def complete_manual_task(
     task = transition_task(
         db, task, 'auto_annotated', actor_account_id=actor_account_id, commit=commit
     )
+    # 创建任务时勾掉了「需要审核」：标完就直接通过，不再等复核
+    if not task.review_required:
+        from app.data.crud import review as review_crud
+
+        review_crud.auto_approve(
+            db, task, actor_account_id=actor_account_id, commit=commit
+        )
+        return task
+
     if commit and task.reviewer_account_id is not None:
         notif_crud.create(
             db,

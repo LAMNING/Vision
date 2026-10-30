@@ -41,7 +41,7 @@ from app.errors import (
 )
 from app.schemas.annotation import AnnotationListItem, AnnotationRead
 from app.schemas.base import Page
-from app.schemas.image import ImageRead
+from app.schemas.image import ImageRead, ProjectImageRead
 from app.schemas.project import (
     ProjectCreateInGroup,
     ProjectListItem,
@@ -76,6 +76,7 @@ MAX_ANNOTATION_LIMIT = 200
 DEFAULT_IMAGE_LIMIT = 50
 MAX_IMAGE_LIMIT = 200
 MAX_BATCH_FILES = 20
+PROJECT_IMAGE_STAGES = project_image_crud.STAGES
 
 
 # ---- 辅助 ----
@@ -496,24 +497,51 @@ def upload_project_images(
     return images
 
 
-@router.get('/{project_id}/images', response_model=Page[ImageRead])
+@router.get('/{project_id}/images', response_model=Page[ProjectImageRead])
 def list_project_images(
     project_id: int,
     account: CurrentAccount,
     db: DBSession,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=MAX_IMAGE_LIMIT)] = DEFAULT_IMAGE_LIMIT,
-) -> Page[ImageRead]:
-    '''项目里已有的图片（软删的不算）。'''
-    require_view(db, account, project_id)
-    rows, total = project_image_crud.list_project_images(
-        db, project_id, offset=offset, limit=limit
+    stage: Annotated[str | None, Query()] = None,
+) -> Page[ProjectImageRead]:
+    '''项目里已有的图片（软删的不算），带标注/审核进度。
+
+    stage 可选 none/pending/annotated/approved/rejected/failed，
+    用来做「只看未标注」这类筛选（建任务时的快捷选择也用它）。
+    '''
+    access = require_view(db, account, project_id)
+    if stage is not None and stage not in PROJECT_IMAGE_STAGES:
+        raise ValidationError(
+            f'stage 必须是 {PROJECT_IMAGE_STAGES} 之一'
+        )
+    rows, total, progress = project_image_crud.list_project_images_with_progress(
+        db, project_id, offset=offset, limit=limit, stage=stage
     )
-    return Page[ImageRead](
-        items=[ImageRead.model_validate(row) for row in rows],
-        total=total,
-        offset=offset,
-        limit=limit,
+
+    items: list[ProjectImageRead] = []
+    for row in rows:
+        info = progress.get(int(row.id)) or {}
+        items.append(
+            ProjectImageRead.model_validate(row).model_copy(
+                update={
+                    'stage': info.get('stage', 'none'),
+                    'annotated': bool(info.get('annotated')),
+                    'review_status': info.get('review_status', 'none'),
+                    'task_count': int(info.get('task_count', 0)),
+                    'task_id': info.get('task_id'),
+                    'task_name': info.get('task_name'),
+                    'task_mode': info.get('task_mode'),
+                    'task_image_id': info.get('task_image_id'),
+                    'can_annotate': bool(info.get('can_annotate')),
+                    'can_review': bool(info.get('can_review')) and access.can_review,
+                }
+            )
+        )
+
+    return Page[ProjectImageRead](
+        items=items, total=total, offset=offset, limit=limit
     )
 
 

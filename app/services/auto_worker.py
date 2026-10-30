@@ -24,6 +24,7 @@ from sqlalchemy import select
 from app import database
 from app.data.crud import annotation as annotation_crud
 from app.data.crud import project_category as category_crud
+from app.data.crud import review as review_crud
 from app.data.crud import task as task_crud
 from app.data.crud import task_image as task_image_crud
 from app.data.crud.project_auto_config import get_or_create_config
@@ -248,6 +249,9 @@ def process_one(db, *, worker_id: str | None = None) -> bool:
 
     task_crud.mark_auto_annotated(db, task)
     task_crud.clear_lease(db, task)
+    # 任务建的时候勾掉了「需要审核」，标完直接通过（auto_approve 自己会判断状态）
+    if not task.review_required:
+        review_crud.auto_approve(db, task, actor_account_id=task.submitter_account_id)
     logger.info('task %s auto annotated', task.id)
     return True
 
