@@ -2,9 +2,10 @@ import json
 from typing import Annotated
 
 from fastapi import APIRouter, File, Query, Response, UploadFile, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.data import Account, Group, Image, Project
+from app.data import Account, Group, Image, Project, Task, TaskImage
 from app.data.crud import audit as audit_crud
 from app.data.crud import image as image_crud
 from app.data.crud import project as project_crud
@@ -59,6 +60,7 @@ from app.schemas.project_member import (
     ProjectMemberRolesUpdate,
 )
 from app.schemas.project_stats import ProjectStatsRead
+from app.schemas.task import ImageTaskRef
 from app.services.image_upload import (
     PreparedImage,
     discard_prepared,
@@ -683,6 +685,47 @@ def list_project_annotation_items(
     return Page[AnnotationListItem](
         items=items, total=total, offset=offset, limit=limit
     )
+
+
+@router.get(
+    '/{project_id}/images/{image_id}/tasks', response_model=list[ImageTaskRef]
+)
+def list_image_tasks(
+    project_id: int,
+    image_id: int,
+    account: CurrentAccount,
+    db: DBSession,
+) -> list[ImageTaskRef]:
+    '''这张图片落在本项目的哪些任务里。
+
+    看图页要提供「在标注台打开」，但图片本身并不知道自己属于哪个任务
+    （一张图可以同时进多个任务），所以由这里一次查出来，前端不用猜。
+    '''
+    _accessible(db, account, project_id)
+
+    rows = db.execute(
+        select(TaskImage, Task)
+        .join(Task, Task.id == TaskImage.task_id)
+        .where(
+            Task.project_id == project_id,
+            TaskImage.image_id == image_id,
+            Task.deleted_at.is_(None),
+        )
+        .order_by(Task.id.desc())
+    ).all()
+
+    return [
+        ImageTaskRef(
+            task_id=task.id,
+            task_name=task.name,
+            task_status=task.status,
+            task_mode=task.mode,
+            task_image_id=row.id,
+            annotation_status=row.annotation_status,
+            review_status=row.review_status,
+        )
+        for row, task in rows
+    ]
 
 
 # ---- 标注导出 ----

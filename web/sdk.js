@@ -460,6 +460,11 @@
 
     // ---- 标注 ----
 
+    /** 这张图片落在本项目的哪些任务里：看图页跳标注台用。 */
+    listImageTasks(projectId, imageId) {
+      return this._json('GET', `/projects/${projectId}/images/${imageId}/tasks`);
+    }
+
     /**
      * 项目标注分页：{ items, total, offset, limit }。
      * 过滤：task_id / task_image_id / category_id / is_current。

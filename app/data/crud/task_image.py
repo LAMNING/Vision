@@ -1,9 +1,26 @@
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.data.task_image import TaskImage
 from app.errors import InvalidImageReviewError, TaskImageNotFoundError
 from app.utils.time import utcnow
+
+
+def progress_by_task(db: Session, task_ids: list[int]) -> dict[int, tuple[int, int]]:
+    '''一次聚合查出多个任务的（图片总数，已标注数）。
+
+    任务列表要显示进度，逐条查详情会变成 N+1，所以这里用一条 GROUP BY 拿全。
+    返回 {task_id: (total, annotated)}；没有图片的任务不在结果里，调用方按 (0, 0) 处理。
+    '''
+    if not task_ids:
+        return {}
+    annotated = func.sum(case((TaskImage.annotation_status == 'annotated', 1), else_=0))
+    rows = db.execute(
+        select(TaskImage.task_id, func.count(TaskImage.id), annotated)
+        .where(TaskImage.task_id.in_(task_ids))
+        .group_by(TaskImage.task_id)
+    ).all()
+    return {int(task_id): (int(total or 0), int(done or 0)) for task_id, total, done in rows}
 
 
 def list_task_images(db: Session, task_id: int) -> list[TaskImage]:

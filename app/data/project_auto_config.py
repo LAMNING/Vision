@@ -14,7 +14,9 @@ if TYPE_CHECKING:
 TRANSLATE_STYLES = ('phrase', 'raw')
 
 DEFAULT_AUTO_ANNOTATE_ENABLED = True
-DEFAULT_BOX_THRESHOLD = 0.25
+# 0.30 起：0.25 时实测会冒出「沙发 0.27 框在电视上」这类噪声框。改这个常量只影响
+# 新建的配置行，老项目库里已存的值不动（见 crud/get_or_create_config）。
+DEFAULT_BOX_THRESHOLD = 0.30
 DEFAULT_TEXT_THRESHOLD = 0.25
 DEFAULT_TOPK: int | None = None
 DEFAULT_TRANSLATE_ENABLED = True

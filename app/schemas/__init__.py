@@ -85,6 +85,7 @@ from app.schemas.task import (
     TaskDetailRead,
     TaskFailRequest,
     TaskImageAttach,
+    TaskListItem,
     TaskMode,
     TaskName,
     TaskRead,
@@ -176,6 +177,7 @@ __all__ = [
     'TaskUpdate',
     'TaskDetailRead',
     'TaskRead',
+    'TaskListItem',
     'TaskImageAttach',
     'TaskFailRequest',
     # notification

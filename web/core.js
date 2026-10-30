@@ -143,6 +143,7 @@ window.VS = (() => {
     forgetAvatar();
     localStorage.removeItem("vision_account_name");
     if (token) sdk.signout().catch(() => {});
+    document.dispatchEvent(new Event("vision:signedout"));
     toLogin();
   }
 

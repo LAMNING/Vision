@@ -18,9 +18,11 @@
 - `theme.js` / `themes.css`：双主题切换、侧栏收起状态与「晴蓝」Material 3 外观层。
 - `app.js`：上传、分析、图像列表、详情和删除。
 - `team.js`：小组、成员、小组成果和聊天客户端。
-- `settings.js`：个人资料与账号安全。
+- `settings.js`：设置弹窗的三节（个人资料与头像 / 外观与主题 / 账号安全）。侧栏「个人与账号」和「设置」打开的是同一个弹窗，各自定位到对应一节。
 - `admin.js`：平台管理页（概览、账号与平台角色、重置密码、小组 / 项目、审计、存储与模型）。
-- `projects.js`：三个空间的项目列表、项目页五个 tab、空间设置抽屉。
+- `projects.js`：三个空间的项目列表、项目页六个 tab（概览 / 图像 / 任务 / 成员 / 类目 / 设置）、新建任务对话框、空间设置抽屉。
+- `annotate.js`：人工标注工作台（左选图 / 中画框 / 右选类目），负责拉取任务图片、编辑 bbox 并以整组覆盖的方式保存，最后「完成标注 / 重新提交 / 重新排队」。
+- `notifications.js`：通知中心（左栏「通知」+ 右侧抽屉）。轮询未读数显示徽标，按 `resource_type` 跳转：`task` 打开任务所在项目，`invitation` 行内直接「接受 / 拒绝」。
 - `core.js`：后端地址、SDK 实例、错误翻译和公共工具。
 - `sdk.js`：FastAPI 接口封装。
 
@@ -171,5 +173,10 @@ python -m http.server 8125 --bind 127.0.0.1
 - 建项目：`POST /projects`，body `{group_id, name, description}`；空间 owner/admin 或企业 admin+ 才能建，创建者成为项目 manager。
 - 列表：`GET /projects?group_id=...&group_type=...`（`personal` / `team` / `org`）。
 - 企业成员访问企业项目由后端 `ProjectAccess` 识别：企业 owner/admin 可管，reviewer 可审，member 可传，guest 只读。
-- 项目页五个 tab：概览（`/projects/{id}/stats`）、图像（图片与上传）、任务（建任务/提交/取消）、成员、设置（改名/类目/归档）。
+- 项目页六个 tab：概览（`/projects/{id}/stats`，顶部「下一步」按项目状态给出下一步动作）、图像（图片与上传）、任务（筛选 + 新建任务对话框）、成员、类目（识别类目，自动标注的 prompt 来源与人工标注的色板）、设置（改名/归档）。
+- 任务列表要走 `GET /projects/{id}/tasks`，返回 `TaskListItem`：在 `TaskRead` 基础上多了 `image_total` / `image_annotated`，列表才能直接显示「已标注 3 / 12」而不用逐条拉详情。
+- 看图页「在标注台打开」靠 `GET /projects/{id}/images/{image_id}/tasks`：一张图可以同时属于多个任务，所以要问后端这张图落在哪个任务、对应哪条 `task_image`、以及能不能改；没有任何可编辑任务时按钮保持隐藏。
 - 空间级功能（小组成员与图库、企业审核/公告/日报）在右上角「空间设置」抽屉里，直接复用 team.js / enterprise.js 的原有 DOM。
+- 「识别方案」对话框同时管两件事：把填写的目标同步成项目类目（新增 / 修改 / 删除），以及置信度阈值 `box_threshold`（滑块 0.05–0.95，默认 0.30，`PATCH /projects/{id}/auto-config`）。上传后分析走的 `syncAnalysisConfig()` **不传**阈值，避免上传动作悄悄改掉老项目的设置；只有在这个对话框里按「保存识别方案」才会写。
+- 目标是一条一条编辑的（`#targetRows` 里每行 `中文名 | 英文提示词 | ×`）：中文名只用于界面显示，英文提示词才是喂给模型的检测口径，留空则保存时由后端按中文名自动翻译（`create_category` / `update_category` 里 `en_name` 传空串即触发翻译）。保存时按行比对——没有 `id` 的新建，改过的 PATCH，从列表里删掉的 DELETE；中文名重复在提交前就拦下。
+- 阈值的作用点在推理之后：一次推理用所有类目里最小的那个阈值取框，再按每个类目的 `threshold_override` / 全局值过滤，最后做跨类目去重（IoU ≥ 0.8，同类目 IoU ≥ 0.6）。所以调高阈值只会少框，不会变快。

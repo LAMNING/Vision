@@ -4,6 +4,7 @@
 // 后端调用一律走 VS.sdk，本文件不出现 fetch。
 
 const { sdk, call } = VS;
+const el = VS.el;
 
 // 页面一次可暂存 50 张；后端项目上传接口每次接收 20 张，确认时自动分批。
 const MAX_BATCH_FILES = 50;
@@ -32,6 +33,7 @@ const detailTitle = document.querySelector("#detailTitle");
 const detailDimensions = document.querySelector("#detailDimensions");
 const detailSize = document.querySelector("#detailSize");
 const detailAnalysis = document.querySelector("#detailAnalysis");
+const detailAnnotate = document.querySelector("#detailAnnotate");
 const deleteImageButton = document.querySelector("#deleteImageButton");
 const sendToGroup = document.querySelector("#sendToGroup");
 const backToImages = document.querySelector("#backToImages");
@@ -41,8 +43,6 @@ const railEnterprise = document.querySelector("#railEnterprise");
 const railAdmin = document.querySelector("#railAdmin");
 const railProfile = document.querySelector("#railProfile");
 const backToUpload = document.querySelector("#backToUpload");
-const profileDialog = document.querySelector("#profileDialog");
-const closeProfileDialog = document.querySelector("#closeProfileDialog");
 const dangerDialog = document.querySelector("#dangerDialog");
 const dangerKicker = document.querySelector("#dangerKicker");
 const dangerTitle = document.querySelector("#dangerTitle");
@@ -56,9 +56,31 @@ const openTargetSettings = document.querySelector("#openTargetSettings");
 const targetSettingsDialog = document.querySelector("#targetSettingsDialog");
 const closeTargetSettings = document.querySelector("#closeTargetSettings");
 const targetSettingsForm = document.querySelector("#targetSettingsForm");
-const projectTargets = document.querySelector("#projectTargets");
 const projectTargetsStatus = document.querySelector("#projectTargetsStatus");
 const saveProjectTargets = document.querySelector("#saveProjectTargets");
+const targetRows = document.querySelector("#targetRows");
+const targetEmpty = document.querySelector("#targetEmpty");
+const targetNewZh = document.querySelector("#targetNewZh");
+const targetNewEn = document.querySelector("#targetNewEn");
+const targetAddButton = document.querySelector("#targetAddButton");
+const projectBoxThreshold = document.querySelector("#projectBoxThreshold");
+const projectBoxThresholdValue = document.querySelector("#projectBoxThresholdValue");
+
+// 与后端 DEFAULT_BOX_THRESHOLD 保持一致；滑块上的值永远以读回来的配置为准。
+const FALLBACK_BOX_THRESHOLD = 0.3;
+let currentBoxThreshold = FALLBACK_BOX_THRESHOLD;
+
+function formatThreshold(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(2) : FALLBACK_BOX_THRESHOLD.toFixed(2);
+}
+
+function setBoxThreshold(value) {
+  currentBoxThreshold = Number(value);
+  const text = formatThreshold(value);
+  if (projectBoxThreshold) projectBoxThreshold.value = text;
+  if (projectBoxThresholdValue) projectBoxThresholdValue.textContent = text;
+}
 
 const utilityRail = document.querySelector(".utility-rail");
 const logoutChip = document.querySelector("#railLogout");
@@ -158,7 +180,7 @@ function setEnterpriseBrand(ent) {
 
 window.VSBrand = { setEnterprise: setEnterpriseBrand };
 
-appAccount.addEventListener("click", () => openDialog(profileDialog));
+appAccount.addEventListener("click", () => openSettings("profile"));
 setAccountBadge(null);
 
 /* ---------------- 工具轨：悬停 0.8 秒展开，离开 300ms 收起 ---------------- */
@@ -206,15 +228,16 @@ function syncRail() {
   railTeam.classList.toggle("is-active", space === "team");
   railEnterprise.classList.toggle("is-active", space === "enterprise");
   railAdmin.classList.toggle("is-active", currentView === "admin");
-  railProfile.classList.toggle("is-active", !profileDialog.hidden);
+  // 「个人与账号」和「设置」打开的是同一个弹窗，高亮统一记在「设置」上
   railSettings.classList.toggle("is-active", !settingsDialog.hidden);
 }
 
 function showView(view) {
   currentView = view;
-  // 图片详情是盖在内容区上面的独立层。不先收掉它，点工具轨切栏目时
-  // 内容区仍是 hidden，看起来就是"点了没反应"。
+  // 图片详情和标注工作台都是盖在内容区上面的独立层。不先收掉它们，
+  // 点工具轨切栏目时内容区仍是 hidden，看起来就是"点了没反应"。
   if (!detailView.hidden) closeImageDetail(true);
+  window.VSAnnotate?.close?.(true);
   allDialogs.forEach((dialog) => {
     if (!dialog.hidden) closeDialog(dialog);
   });
@@ -340,9 +363,18 @@ function toggleDialog(dialog) {
   else closeDialog(dialog);
 }
 
-railProfile.addEventListener("click", () => toggleDialog(profileDialog));
-closeProfileDialog.addEventListener("click", () => closeDialog(profileDialog));
-railSettings.addEventListener("click", () => toggleDialog(settingsDialog));
+/* 设置是同一个弹窗，两个入口各自定位到对应小节：
+   「个人与账号」跳个人资料，「设置」跳外观与主题。 */
+function openSettings(section) {
+  const target = { profile: "#settingsProfileSection", theme: "#settingsThemeSection", security: "#settingsSecuritySection" }[section];
+  openDialog(settingsDialog);
+  const node = target && document.querySelector(target);
+  if (!node) return;
+  window.requestAnimationFrame(() => node.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+}
+
+railProfile.addEventListener("click", () => openSettings("profile"));
+railSettings.addEventListener("click", () => openSettings("theme"));
 closeSettingsDialog.addEventListener("click", () => closeDialog(settingsDialog));
 openTargetSettings.addEventListener("click", () => {
   openDialog(targetSettingsDialog);
@@ -963,9 +995,128 @@ function renderProjectTargets(targets, { unavailable = false } = {}) {
   }
   targetPlanTitle.textContent = targets.length ? targets.join("、") : "尚未设置识别目标";
   targetPlanDetail.textContent = targets.length
-    ? `已保存 ${targets.length} 项，后续上传会自动带出。`
+    ? `已保存 ${targets.length} 项，置信度 ${formatThreshold(currentBoxThreshold)}，后续上传会自动带出。`
     : "设置一次，后续上传会自动复用。";
   syncAnalysisCounters();
+}
+
+/* ---------------- 识别目标逐条编辑 ---------------- */
+
+// 保存时用这份快照算「哪些被删掉了」：编辑框里没有的、且原本存在的，就是要删的。
+let targetSnapshot = [];
+
+function targetRowNode({ id = null, zh = "", en = "" }) {
+  const row = el("li", "target-row");
+  if (id != null) row.dataset.id = String(id);
+  row.dataset.zh = zh;
+  row.dataset.en = en;
+
+  const zhInput = el("input", "target-zh");
+  zhInput.type = "text";
+  zhInput.maxLength = 50;
+  zhInput.placeholder = "中文名";
+  zhInput.value = zh;
+  zhInput.autocomplete = "off";
+  zhInput.setAttribute("aria-label", "目标中文名");
+
+  const enInput = el("input", "target-en");
+  enInput.type = "text";
+  enInput.maxLength = 100;
+  enInput.placeholder = "英文提示词（留空自动翻译）";
+  enInput.value = en;
+  enInput.autocomplete = "off";
+  enInput.setAttribute("aria-label", "目标英文提示词");
+
+  const remove = el("button", "target-remove", "×");
+  remove.type = "button";
+  remove.title = "移除这一条";
+  remove.setAttribute("aria-label", `移除 ${zh || "这一条目标"}`);
+  remove.addEventListener("click", () => {
+    row.remove();
+    syncTargetRows();
+    const dropped = droppedTargetCount();
+    projectTargetsStatus.classList.remove("is-error");
+    projectTargetsStatus.textContent = dropped
+      ? `已移除 ${dropped} 条，保存后生效`
+      : "点「保存识别方案」才会写回项目";
+  });
+
+  for (const input of [zhInput, enInput]) {
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        addTargetFromInputs();
+      }
+    });
+  }
+
+  row.append(zhInput, enInput, remove);
+  return row;
+}
+
+function syncTargetRows() {
+  if (targetEmpty) targetEmpty.hidden = targetRows.children.length > 0;
+}
+
+function renderTargetRows(categories) {
+  targetSnapshot = categories.map((item) => ({ id: item.id, zh: item.zh_name, en: item.en_name }));
+  targetRows.replaceChildren();
+  for (const item of targetSnapshot) {
+    targetRows.append(targetRowNode({ id: item.id, zh: item.zh, en: item.en }));
+  }
+  syncTargetRows();
+}
+
+function collectTargetRows() {
+  return [...targetRows.children]
+    .map((row) => ({
+      id: row.dataset.id ? Number(row.dataset.id) : null,
+      zh: (row.querySelector(".target-zh")?.value || "").trim(),
+      en: (row.querySelector(".target-en")?.value || "").trim(),
+      wasZh: row.dataset.zh || "",
+      wasEn: row.dataset.en || "",
+    }))
+    .filter((row) => row.zh || row.en);
+}
+
+function droppedTargetCount() {
+  const kept = new Set(collectTargetRows().map((row) => row.id).filter(Boolean));
+  return targetSnapshot.filter((item) => !kept.has(item.id)).length;
+}
+
+function addTargetFromInputs() {
+  const zh = targetNewZh.value.trim();
+  const en = targetNewEn.value.trim();
+  if (!zh) {
+    projectTargetsStatus.classList.add("is-error");
+    projectTargetsStatus.textContent = "先填中文名，英文可以留空";
+    targetNewZh.focus();
+    return;
+  }
+  const clash = collectTargetRows().some((row) => row.zh === zh);
+  if (clash) {
+    projectTargetsStatus.classList.add("is-error");
+    projectTargetsStatus.textContent = `「${zh}」已经在列表里了`;
+    targetNewZh.focus();
+    return;
+  }
+  targetRows.append(targetRowNode({ zh, en }));
+  syncTargetRows();
+  targetNewZh.value = "";
+  targetNewEn.value = "";
+  targetNewZh.focus();
+  projectTargetsStatus.classList.remove("is-error");
+  projectTargetsStatus.textContent = `已添加「${zh}」，保存后生效`;
+}
+
+targetAddButton?.addEventListener("click", addTargetFromInputs);
+for (const input of [targetNewZh, targetNewEn]) {
+  input?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addTargetFromInputs();
+    }
+  });
 }
 
 async function loadProjectTargets({ forEditor = false } = {}) {
@@ -977,11 +1128,14 @@ async function loadProjectTargets({ forEditor = false } = {}) {
   try {
     const project = await ensureImageProject();
     const categories = await call(() => sdk.listCategories(project.id, { includeDisabled: true }));
+    // 阈值顺带读一次：方案卡片和对话框滑块都用它，读不到就退回默认值。
+    const config = await call(() => sdk.getAutoConfig(project.id)).catch(() => null);
+    setBoxThreshold(config?.box_threshold ?? FALLBACK_BOX_THRESHOLD);
     const targets = categories.filter((item) => item.enabled).map((item) => item.zh_name).filter(Boolean);
     renderProjectTargets(targets);
     if (!analysisTargetsDirty) analysisTargets.value = targets.join("、");
     if (forEditor) {
-      projectTargets.value = targets.join("、");
+      renderTargetRows(categories.filter((item) => item.enabled));
       projectTargetsStatus.textContent = targets.length ? `已读取 ${targets.length} 项识别目标` : "还没有保存识别目标";
     }
     return targets;
@@ -999,7 +1153,8 @@ async function loadProjectTargets({ forEditor = false } = {}) {
 
 // 用户填的识别目标要变成项目类目：新词建类目，旧词按需启停，
 // 再打开自动标注与中文翻译。这样模型才知道要检测什么。
-async function syncAnalysisConfig(projectId, targets) {
+// boxThreshold 只在「识别方案」保存时显式传入：上传流程不传，免得悄悄改掉老项目的阈值。
+async function syncAnalysisConfig(projectId, targets, { boxThreshold } = {}) {
   const existing = await call(() => sdk.listCategories(projectId, { includeDisabled: true }));
   const selected = new Set(targets);
   for (const category of existing) {
@@ -1012,10 +1167,12 @@ async function syncAnalysisConfig(projectId, targets) {
   for (const name of selected) {
     await call(() => sdk.createCategory(projectId, { zhName: name, enabled: true }));
   }
-  await call(() => sdk.updateAutoConfig(projectId, {
+  const fields = {
     auto_annotate_enabled: true,
     translate_enabled: true,
-  }));
+  };
+  if (boxThreshold !== undefined) fields.box_threshold = boxThreshold;
+  await call(() => sdk.updateAutoConfig(projectId, fields));
 }
 
 async function submitAnalysisTask(project, images, targets) {
@@ -1034,27 +1191,83 @@ async function submitAnalysisTask(project, images, targets) {
 
 analysisTargets.addEventListener("input", () => { analysisTargetsDirty = true; });
 
+projectBoxThreshold?.addEventListener("input", () => {
+  if (projectBoxThresholdValue) projectBoxThresholdValue.textContent = formatThreshold(projectBoxThreshold.value);
+});
+
 targetSettingsForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const targets = parseTargets(projectTargets.value);
+  const rows = collectTargetRows();
   projectTargetsStatus.classList.remove("is-error");
-  if (!targets.length) {
+
+  if (!rows.length) {
     projectTargetsStatus.classList.add("is-error");
-    projectTargetsStatus.textContent = "请至少填写一个识别目标";
-    projectTargets.focus();
+    projectTargetsStatus.textContent = "请至少添加一个识别目标";
+    targetNewZh.focus();
     return;
   }
+  const missingZh = rows.find((row) => !row.zh);
+  if (missingZh) {
+    projectTargetsStatus.classList.add("is-error");
+    projectTargetsStatus.textContent = "有一条只填了英文，请补上中文名";
+    return;
+  }
+  const seen = new Set();
+  for (const row of rows) {
+    if (seen.has(row.zh)) {
+      projectTargetsStatus.classList.add("is-error");
+      projectTargetsStatus.textContent = `「${row.zh}」重复了，删掉其中一条`;
+      return;
+    }
+    seen.add(row.zh);
+  }
+
   saveProjectTargets.disabled = true;
   saveProjectTargets.textContent = "正在保存…";
   projectTargetsStatus.textContent = "正在同步到项目…";
   try {
     const project = await ensureImageProject();
-    await syncAnalysisConfig(project.id, targets);
-    projectTargets.value = targets.join("、");
-    analysisTargets.value = targets.join("、");
+    const boxThreshold = Number(projectBoxThreshold.value);
+    const keptIds = new Set(rows.map((row) => row.id).filter(Boolean));
+    const removed = targetSnapshot.filter((item) => !keptIds.has(item.id));
+
+    let created = 0;
+    let updated = 0;
+    for (const row of rows) {
+      if (row.id == null) {
+        // 新加的一条：英文留空交给后端翻译
+        await call(() => sdk.createCategory(project.id, { zhName: row.zh, enName: row.en, enabled: true }));
+        created += 1;
+        continue;
+      }
+      if (row.zh === row.wasZh && row.en === row.wasEn) continue;
+      // en_name 传空串 = 按当前中文名重新翻译
+      await call(() => sdk.updateCategory(project.id, row.id, { zh_name: row.zh, en_name: row.en, enabled: true }));
+      updated += 1;
+    }
+    for (const item of removed) {
+      await call(() => sdk.deleteCategory(project.id, item.id));
+    }
+
+    await call(() => sdk.updateAutoConfig(project.id, {
+      auto_annotate_enabled: true,
+      translate_enabled: true,
+      box_threshold: boxThreshold,
+    }));
+    setBoxThreshold(boxThreshold);
+
+    const fresh = await call(() => sdk.listCategories(project.id, { includeDisabled: true }));
+    const names = fresh.filter((item) => item.enabled).map((item) => item.zh_name).filter(Boolean);
+    renderTargetRows(fresh.filter((item) => item.enabled));
+    analysisTargets.value = names.join("、");
     analysisTargetsDirty = false;
-    renderProjectTargets(targets);
-    projectTargetsStatus.textContent = `已保存 ${targets.length} 项，下一次上传会自动使用`;
+    renderProjectTargets(names);
+
+    const bits = [`已保存 ${names.length} 项`];
+    if (created) bits.push(`新增 ${created}`);
+    if (updated) bits.push(`修改 ${updated}`);
+    if (removed.length) bits.push(`删除 ${removed.length}`);
+    projectTargetsStatus.textContent = `${bits.join("，")}，置信度 ${formatThreshold(boxThreshold)}，下一次上传会自动使用`;
   } catch (error) {
     projectTargetsStatus.classList.add("is-error");
     projectTargetsStatus.textContent = error.message === "Failed to fetch" ? "暂时无法连接后端，请稍后重试" : error.message;
@@ -1095,6 +1308,35 @@ async function openImageDetail(image, options = {}) {
       : "← 返回项目";
   detailImage.removeAttribute("src");
   annotationOverlay.replaceChildren();
+  // 「在标注台打开」只在项目里、且这张图确实落在某个可改的任务上时才出现
+  if (detailAnnotate) {
+    detailAnnotate.hidden = true;
+    detailAnnotate.onclick = null;
+  }
+  if (currentView === "project" && activeProject?.id) {
+    sdk
+      .listImageTasks(activeProject.id, image.id)
+      .then((rows) => {
+        if (currentImage !== image) return;
+        const editable = (rows || []).find((row) =>
+          row.task_status === "rejected_fix"
+          || row.task_status === "rejected_reannotate"
+          || (row.task_status === "queued" && row.task_mode === "manual")
+        );
+        if (!editable || !detailAnnotate) return;
+        detailAnnotate.hidden = false;
+        detailAnnotate.onclick = () => {
+          const projectId = activeProject?.id;
+          closeImageDetail(true);
+          window.VSAnnotate?.open({
+            projectId,
+            taskId: editable.task_id,
+            taskImageId: editable.task_image_id,
+          });
+        };
+      })
+      .catch(() => {});
+  }
   content.hidden = true;
   detailView.hidden = false;
   requestAnimationFrame(() => detailView.classList.add("is-visible"));

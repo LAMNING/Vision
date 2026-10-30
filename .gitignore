@@ -185,3 +185,4 @@ logs/
 *.db-journal
 
 state/
+.shots/

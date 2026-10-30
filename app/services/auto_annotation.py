@@ -20,6 +20,13 @@ from app.services.model.detector import merge_candidate_labels
 DETERMINERS = ('a', 'an', 'the', 'some', 'this', 'that', 'these', 'those')
 TRANSLATE_STYLES = ('phrase', 'raw')
 
+# 同一物体被多个 prompt 各框一次时，这些框几乎完全重合（实测 0.81–0.99）；
+# 真正互相重叠的不同物体（人骑马之类）通常只有 0.4–0.6。取 0.8 只砍重复、不砍真重叠。
+IOU_DEDUPE = 0.8
+# 同一个类目内部更激进：同类两个框重叠到 0.6 基本就是同一个物件被提了两次，
+# 而不同类目之间可能真的是两个物体叠在一起，所以门槛继续留在 0.8。
+IOU_DEDUPE_SAME = 0.6
+
 
 class TranslatorLike(Protocol):
     def translate_many(self, texts: Sequence[str]) -> list[str]: ...
@@ -94,7 +101,7 @@ def build_prompts(
     config: AutoConfig,
     translator: TranslatorLike | None = None,
 ) -> list[PromptSpec]:
-    """One prompt per enabled category (en_name wins; translation only when on)."""
+    """One prompt per enabled category: 手写的 en_name 优先，留空才让翻译补位。"""
     if config.translate_style not in TRANSLATE_STYLES:
         raise ValueError(
             f'translate_style must be one of {TRANSLATE_STYLES}, got {config.translate_style!r}'
@@ -103,10 +110,9 @@ def build_prompts(
     if not enabled:
         return []
 
-    # 需要翻译的两种情况：配置打开了翻译，或某些类目只有中文名/英文提示词为空
-    needs_translation = config.translate_enabled or any(
-        not category.en_name.strip() for category in enabled
-    )
+    # 只有「英文提示词为空」的类目才需要翻译。en_name 一旦填了就是用户选定的检测口径，
+    # 翻译结果不能再盖掉它（从前 translate_enabled 一开就会盖掉，手填的英文永远不生效）。
+    needs_translation = any(not category.en_name.strip() for category in enabled)
 
     translations: list[str] | None = None
     if needs_translation:
@@ -122,15 +128,13 @@ def build_prompts(
 
     prompts: list[PromptSpec] = []
     for index, category in enumerate(enabled):
-        source = 'en_name'
-        if config.translate_enabled or not category.en_name.strip():
+        written = ' '.join(category.en_name.strip().split()).lower()
+        if written:
+            prompt = written
+            source = 'en_name'
+        else:
             prompt = _normalize_translation(translations[index], config.translate_style)  # type: ignore[index]
             source = 'translated'
-        elif category.en_name.strip():
-            prompt = ' '.join(category.en_name.strip().split()).lower()
-        else:
-            prompt = ' '.join(category.zh_name.strip().split()).lower()
-            source = 'zh_fallback'
         if not prompt:
             continue
         threshold = (
@@ -182,6 +186,52 @@ def attach_spans(
     )
 
 
+def _iou(box_a: Sequence[float], box_b: Sequence[float]) -> float:
+    """IoU of two [x0, y0, x1, y1] boxes (0.0 when either is malformed)."""
+    try:
+        ax0, ay0, ax1, ay1 = (float(value) for value in box_a)
+        bx0, by0, bx1, by1 = (float(value) for value in box_b)
+    except (TypeError, ValueError):
+        return 0.0
+    inner = max(0.0, min(ax1, bx1) - max(ax0, bx0)) * max(0.0, min(ay1, by1) - max(ay0, by0))
+    if inner <= 0:
+        return 0.0
+    area_a = max(0.0, ax1 - ax0) * max(0.0, ay1 - ay0)
+    area_b = max(0.0, bx1 - bx0) * max(0.0, by1 - by0)
+    union = area_a + area_b - inner
+    return inner / union if union > 0 else 0.0
+
+
+def _dedupe(hits: Sequence[tuple[PromptSpec, dict]]) -> list[tuple[PromptSpec, dict]]:
+    """Keep one box per physical object.
+
+    All prompts share a single merged sentence, so the detector may emit the same
+    region several times — once per prompt — and span mapping then hands each copy
+    to a different category (observed IoU 0.81–0.99 between those copies). Genuinely
+    different objects that overlap (a person riding a horse) sit far lower, around
+    0.4–0.6, so a high threshold removes the duplicates without merging real ones.
+    Same-category boxes are held to a lower bar: two boxes of one class overlapping
+    that much are the same object proposed twice.
+    """
+    kept: list[tuple[PromptSpec, dict]] = []
+    for category, result in hits:
+        box = result.get('box')
+        if not box or len(box) != 4:
+            kept.append((category, result))
+            continue
+        duplicate = False
+        for other_category, other in kept:
+            same = other_category.category_id == category.category_id
+            limit = IOU_DEDUPE_SAME if same else IOU_DEDUPE
+            if _iou(box, other.get('box') or ()) >= limit:
+                duplicate = True
+                break
+        if duplicate:
+            continue
+        kept.append((category, result))
+    return kept
+
+
 def _map_detections(results: Sequence[dict], prompts: Sequence[PromptSpec]) -> list[tuple[PromptSpec, dict]]:
     hits: list[tuple[PromptSpec, dict]] = []
     for result in results:
@@ -206,7 +256,7 @@ def _map_detections(results: Sequence[dict], prompts: Sequence[PromptSpec]) -> l
             continue
         hits.append((category, result))
     hits.sort(key=lambda item: float(item[1].get('score') or 0.0), reverse=True)
-    return hits
+    return _dedupe(hits)
 
 
 def to_annotation_item(category: PromptSpec, result: dict) -> dict:

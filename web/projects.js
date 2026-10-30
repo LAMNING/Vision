@@ -3,9 +3,9 @@
 // 里面直接复用 team.js / enterprise.js 原有的 DOM，不重写一套。
 (() => {
   const $ = (selector) => document.querySelector(selector);
-  const { call, sdk, el, status, runForm, displayName, avatarNode } = VS;
+  const { call, sdk, el, status, runForm, displayName, avatarNode, formatSize } = VS;
 
-  const SPACE_LABEL = { personal: "个人空间", team: "团队空间", enterprise: "企业空间" };
+  const SPACE_LABEL = { personal: "个人空间", team: "小组空间", enterprise: "企业空间" };
   const ROLE_LABEL = {
     owner: "所有者", admin: "管理员", manager: "项目管理员",
     annotator: "标注员", reviewer: "审核员", member: "成员", guest: "只读",
@@ -27,7 +27,12 @@
   let spaceItems = [];
   let enterprises = [];
   let createTarget = null;       // { kind, groupId }
-  const loaded = { overview: false, tasks: false, members: false, settings: false };
+  let viewer = null;             // 当前账号，用来判断「标注」入口要不要露出来
+  let taskFilter = "";           // 任务列表的状态筛选，空串 = 全部
+  let memberMap = null;          // 成员 id → 显示名，供任务行显示负责人
+  let taskPickImages = [];       // 新建任务对话框里的图片清单
+  let taskCreateBlocked = false; // 没有启用类目时拦住「创建任务」
+  const loaded = { overview: false, tasks: false, members: false, categories: false, settings: false };
 
   /* ---------------- 把旧面板搬进新容器 ---------------- */
 
@@ -140,6 +145,19 @@
           ? (kind === "team" ? "点右上角「空间设置」，在里面新建小组。" : "先用右上角创建企业，或凭企业码加入。")
           : "项目是图片、任务和成员的容器。点右上角「新建项目」开始。")
       );
+      // 个人空间第一次进来时把整条链路摆出来，否则用户建完项目就不知道下一步了
+      if (kind === "personal" && !noSpace) {
+        const chain = el("ol", "first-run-steps");
+        [
+          "新建项目",
+          "「图像」tab 上传图片",
+          "「类目」tab 加识别类目",
+          "「任务」tab 新建任务",
+          "自动或人工标注",
+          "复核通过后导出",
+        ].forEach((step) => chain.append(el("li", "", step)));
+        empty.append(chain);
+      }
       box.append(empty);
       return;
     }
@@ -169,7 +187,12 @@
   async function openProject(project) {
     current = project;
     tab = "overview";
-    loaded.overview = loaded.tasks = loaded.members = loaded.settings = false;
+    loaded.overview = loaded.tasks = loaded.members = loaded.categories = loaded.settings = false;
+    // 换项目要重置列表态，否则会带着上个项目的筛选与成员缓存
+    taskFilter = "";
+    memberMap = null;
+    taskPickImages = [];
+    if ($("#projectTaskFilter")) $("#projectTaskFilter").value = "";
 
     $("#projectName").textContent = project.name;
     $("#projectDesc").textContent = project.description || "暂无描述";
@@ -211,6 +234,7 @@
       if (next === "overview") await loadOverview();
       if (next === "tasks") await loadTasks();
       if (next === "members") await loadMembers();
+      if (next === "categories") await loadCategories();
       if (next === "settings") await loadSettings();
       if (next === "images") window.VSApp?.loadProject?.(current, { force: true });
     } catch (error) {
@@ -218,19 +242,57 @@
     }
   }
 
+  /**
+   * 概览顶部那条「下一步」。项目卡在「有项目没图」「有图没类目」「有类目没任务」时
+   * 界面原本一片安静，用户不知道还差什么才能跑起来。
+   */
+  function renderNextStep(stats, tasks, categories) {
+    const strip = $("#projectNext");
+    if (!strip) return;
+    const steps = [];
+    if (!stats.images_total) {
+      steps.push({ label: "上传第一批图片", hint: "图片是任务的原料，先传几张。", action: () => switchTab("images") });
+    }
+    if (!categories.length) {
+      steps.push({ label: "添加识别类目", hint: "自动标注靠它出框，人工标注也从这里取色板。", action: () => switchTab("categories") });
+    }
+    if (!tasks.length) {
+      steps.push({ label: "新建标注任务", hint: "选图片 + 选自动或人工，就能开跑。", action: () => openTaskCreate() });
+    }
+    const waiting = tasks.filter((task) => task.status === "queued" || task.status === "auto_annotated");
+    if (tasks.length && waiting.length) {
+      steps.push({ label: "处理待办任务", hint: `有 ${waiting.length} 个任务在等你。`, action: () => switchTab("tasks") });
+    }
+    strip.replaceChildren();
+    if (!steps.length) {
+      strip.hidden = true;
+      return;
+    }
+    strip.hidden = false;
+    strip.append(el("span", "project-next-kicker", "下一步"));
+    steps.slice(0, 2).forEach((step) => {
+      const button = el("button", "project-next-step");
+      button.type = "button";
+      button.append(el("strong", "", step.label), el("small", "", step.hint));
+      button.addEventListener("click", step.action);
+      strip.append(button);
+    });
+  }
+
   async function loadOverview() {
     if (loaded.overview) return;
-    const [stats, tasks] = await Promise.all([
+    const [stats, tasks, categories] = await Promise.all([
       call(() => sdk.projectStats(current.id)),
       call(() => sdk.listProjectTasks(current.id)),
+      call(() => sdk.listCategories(current.id)).catch(() => []),
     ]);
     const cells = [
       ["图片", stats.images_total],
+      ["类目", categories.length],
       ["任务", stats.tasks_total],
       ["标注", stats.annotations_current],
       ["已通过", stats.approved_tasks],
       ["通过率", stats.reviewed_tasks ? formatRate(stats.review_pass_rate) : "—"],
-      ["待处理", (stats.tasks_by_status?.queued || 0) + (stats.tasks_by_status?.auto_annotating || 0)],
     ];
     const box = $("#projectStats");
     box.replaceChildren();
@@ -239,6 +301,8 @@
       cell.append(el("b", "", String(value ?? 0)), el("small", "", label));
       box.append(cell);
     });
+
+    renderNextStep(stats, tasks, categories);
 
     const recent = tasks.slice().reverse().slice(0, 5);
     $("#projectRecentMeta").textContent = tasks.length ? `共 ${tasks.length} 个任务` : "还没有任务";
@@ -250,7 +314,7 @@
       recent.forEach((task) => {
         const line = el("div", "project-line");
         line.append(
-          el("span", "", `#${task.id} · ${STATUS_LABEL[task.status] || task.status}`),
+          el("span", "", `#${task.id} · ${statusLabel(task)}`),
           el("strong", "", task.name || (task.mode === "manual" ? "人工标注任务" : "自动标注任务"))
         );
         list.append(line);
@@ -266,26 +330,91 @@
 
   /* ---------------- 任务 ---------------- */
 
+  /**
+   * 同一个 queued 对两种任务含义不同：自动任务是「等 worker 取走」，
+   * 人工任务却是「等人来画」。列表按模式换词，否则会出现「排队中 · 人工」配一颗「标注」按钮。
+   */
+  function statusLabel(task) {
+    if (task.status === "queued" && task.mode === "manual") return "待标注";
+    return STATUS_LABEL[task.status] || task.status;
+  }
+
+  /** 成员 id → 显示名：任务行要显示负责人，光有 account_id 没法看。 */
+  async function memberNames() {
+    if (memberMap) return memberMap;
+    memberMap = new Map();
+    try {
+      const rows = await call(() => sdk.listProjectMembers(current.id));
+      rows.forEach((member) => {
+        const account = member.account || {};
+        memberMap.set(member.account_id, displayName(account) || `#${member.account_id}`);
+      });
+    } catch (error) {
+      memberMap = new Map();
+    }
+    return memberMap;
+  }
+
   async function loadTasks() {
-    const tasks = await call(() => sdk.listProjectTasks(current.id));
-    $("#projectTasksMeta").textContent = `共 ${tasks.length} 个任务`;
+    const [tasks, mine] = await Promise.all([
+      call(() => sdk.listProjectTasks(current.id)),
+      viewerOf(),
+    ]);
+    const names = await memberNames();
+    const visible = taskFilter ? tasks.filter((task) => task.status === taskFilter) : tasks;
+    $("#projectTasksMeta").textContent = taskFilter
+      ? `共 ${tasks.length} 个任务 · 当前筛出 ${visible.length} 个`
+      : `共 ${tasks.length} 个任务`;
     const box = $("#projectTaskList");
     box.replaceChildren();
     if (!tasks.length) {
-      box.append(el("div", "empty-state project-empty", "还没有任务。用项目里的图片新建一个自动标注任务。"));
+      box.append(el("div", "empty-state project-empty", "还没有任务。点右上角「新建任务」，选好图片和标注方式就能开始。"));
       return;
     }
-    tasks.forEach((task) => {
+    if (!visible.length) {
+      box.append(el("div", "empty-state project-empty", `没有「${STATUS_LABEL[taskFilter] || taskFilter}」状态的任务，换个筛选看看。`));
+      return;
+    }
+    visible.forEach((task) => {
       const row = el("div", "project-task");
       const copy = el("div", "project-task-copy");
-      copy.append(
-        el("strong", "", task.name || `任务 #${task.id}`),
-        el("small", "", `${STATUS_LABEL[task.status] || task.status} · ${task.mode === "manual" ? "人工" : "自动"} · ${when(task.created_at)}`)
-      );
+      copy.append(el("strong", "", task.name || `任务 #${task.id}`));
+
+      const meta = el("small", "project-task-meta");
+      meta.append(el("span", "task-chip", statusLabel(task)));
+      meta.append(el("span", "", task.mode === "manual" ? "人工" : "自动"));
+      if (task.image_total) {
+        meta.append(el("span", "", `已标注 ${task.image_annotated} / ${task.image_total}`));
+      }
+      const ownerId = task.assignee_account_id || task.submitter_account_id;
+      if (ownerId) {
+        const who = names.get(ownerId) || `#${ownerId}`;
+        meta.append(el("span", "", `${task.assignee_account_id ? "负责" : "提交"} ${who}`));
+      }
+      meta.append(el("span", "", when(task.created_at)));
+      copy.append(meta);
+
+      if (task.image_total) {
+        const bar = el("div", "task-progress");
+        const fill = el("span", "task-progress-fill");
+        const ratio = task.image_annotated / task.image_total;
+        fill.style.width = `${Math.round(ratio * 100)}%`;
+        if (ratio >= 1) fill.classList.add("is-full");
+        bar.append(fill);
+        copy.append(bar);
+      }
+
       row.append(copy);
       const actions = el("div", "project-task-actions");
+      const annotateLabel = annotateEntryLabel(task, mine);
+      if (annotateLabel) {
+        const annotate = el("button", "mini-button is-accent", annotateLabel);
+        annotate.type = "button";
+        annotate.addEventListener("click", () => window.VSAnnotate?.open({ projectId: current.id, taskId: task.id }));
+        actions.append(annotate);
+      }
       if (task.status === "draft") {
-        const submit = el("button", "mini-button is-pass", "提交");
+        const submit = el("button", "mini-button", "提交");
         submit.type = "button";
         submit.addEventListener("click", () => act(() => sdk.submitTask(current.id, task.id), submit));
         actions.append(submit);
@@ -293,13 +422,49 @@
       if (!TERMINAL.has(task.status)) {
         const cancel = el("button", "mini-button is-reject", "取消");
         cancel.type = "button";
-        cancel.addEventListener("click", () => act(() => sdk.cancelTask(current.id, task.id), cancel));
+        cancel.addEventListener("click", async () => {
+          // 取消是终态，误点就回不来了；和「归档」用同一套确认卡。
+          const ok = await window.confirmDanger({
+            kicker: "CANCEL",
+            title: "取消这个任务？",
+            message: "取消后不能再继续标注，需要的话只能重新建任务。",
+            detail: task.name || `任务 #${task.id}`,
+            confirmText: "取消任务",
+          });
+          if (ok) act(() => sdk.cancelTask(current.id, task.id), cancel);
+        });
         actions.append(cancel);
       }
       if (!actions.children.length) actions.append(el("span", "project-task-done", "已结束"));
       row.append(actions);
       box.append(row);
     });
+  }
+
+  /** 该不该在这个任务上露出「标注 / 修正标注」入口；返回按钮文案或 null。 */
+  function annotateEntryLabel(task, mine) {
+    const manual = task.mode === "manual" && task.status === "queued";
+    const fixing = task.status === "rejected_fix" || task.status === "rejected_reannotate";
+    if (!manual && !fixing) return null;
+    // 后端 _can_edit_annotations 的口径：能管项目、是标注员、是提交人或被指派人
+    const allowed = current?.can_manage
+      || current?.role === "annotator"
+      || !mine
+      || task.submitter_account_id === mine.id
+      || task.assignee_account_id === mine.id;
+    if (!allowed) return null;
+    return manual ? "标注" : "修正标注";
+  }
+
+  /** 只在需要时拉一次 /auth/me，失败就当拿不到身份（入口照常显示，交给后端判定）。 */
+  async function viewerOf() {
+    if (viewer) return viewer;
+    try {
+      viewer = await call(() => sdk.me());
+    } catch (error) {
+      viewer = null;
+    }
+    return viewer;
   }
 
   async function act(task, button) {
@@ -315,23 +480,110 @@
     }
   }
 
-  async function createTask() {
-    const button = $("#projectNewTask");
-    button.disabled = true;
+  /* ---------------- 新建任务 ---------------- */
+
+  /** 打开对话框时拉一次项目图片，渲染成可勾选清单（默认全选）。 */
+  async function openTaskCreate() {
+    if (!current) return;
+    $("#taskCreateName").value = "";
+    $("#taskCreateSubmit").disabled = false;
+    status("#taskCreateStatus", "");
+    taskPickImages = [];
+    const list = $("#taskPickList");
+    list.replaceChildren(el("p", "task-pick-empty", "正在读取项目图片…"));
+    $("#taskPickCount").textContent = "—";
+    openDialog($("#taskCreateDialog"));
+    window.setTimeout(() => $("#taskCreateName").focus(), 120);
+    // 没有启用类目时提交会被后端挡回来（"项目还没有启用的类目"），先在这里说清楚
+    const categories = await call(() => sdk.listCategories(current.id)).catch(() => []);
+    taskCreateBlocked = !categories.filter((category) => category.enabled !== false).length;
+    const hint = $("#taskCreateHint");
+    if (hint) {
+      hint.hidden = !taskCreateBlocked;
+      if (taskCreateBlocked) hint.textContent = "这个项目还没有识别类目，提交任务会被拦下。先去「类目」tab 加一个。";
+    }
+    if (taskCreateBlocked) $("#taskCreateSubmit").disabled = true;
     try {
       const page = await call(() => sdk.listProjectImages(current.id, { limit: 200 }));
-      const items = page.items || [];
-      if (!items.length) throw new Error("项目里还没有图片，先去「图像」上传");
-      await call(() => sdk.createTask(current.id, {
-        imageIds: items.map((image) => image.id),
-        mode: "auto",
-      }));
-      status("#projectTaskStatus", `已用 ${items.length} 张图片创建任务`);
-      await loadTasks();
-      loaded.overview = false;
+      taskPickImages = page.items || [];
     } catch (error) {
-      status("#projectTaskStatus", error.message, true);
-    } finally {
+      list.replaceChildren(el("p", "task-pick-empty", error.message));
+      return;
+    }
+    if (!taskPickImages.length) {
+      list.replaceChildren(el("p", "task-pick-empty", "项目里还没有图片。先去「图像」tab 上传，再回来建任务。"));
+      updatePickCount();
+      return;
+    }
+    list.replaceChildren();
+    taskPickImages.forEach((image) => {
+      const item = el("label", "task-pick-item");
+      const box = el("input", "task-pick-box");
+      box.type = "checkbox";
+      box.value = String(image.id);
+      box.checked = true;
+      box.addEventListener("change", updatePickCount);
+      item.append(
+        box,
+        el("span", "task-pick-name", image.filename || `#${image.id}`),
+        el("small", "", `${image.width || "?"}×${image.height || "?"} · ${formatSize(image.size_bytes)}`)
+      );
+      list.append(item);
+    });
+    updatePickCount();
+  }
+
+  function pickedImageIds() {
+    return Array.from(document.querySelectorAll("#taskPickList .task-pick-box"))
+      .filter((node) => node.checked)
+      .map((node) => Number(node.value));
+  }
+
+  function updatePickCount() {
+    const total = taskPickImages.length;
+    const picked = pickedImageIds().length;
+    $("#taskPickCount").textContent = total ? `已选 ${picked} / ${total} 张` : "项目里还没有图片";
+    const button = $("#taskCreateSubmit");
+    if (button) button.disabled = !picked || taskCreateBlocked;
+  }
+
+  function pickAll(checked) {
+    document.querySelectorAll("#taskPickList .task-pick-box").forEach((node) => {
+      node.checked = checked;
+    });
+    updatePickCount();
+  }
+
+  function chosenMode() {
+    const node = document.querySelector('input[name="taskCreateMode"]:checked');
+    return node ? node.value : "auto";
+  }
+
+  async function submitTaskCreate() {
+    const imageIds = pickedImageIds();
+    if (!imageIds.length) {
+      status("#taskCreateStatus", "至少选一张图片", true);
+      return;
+    }
+    const mode = chosenMode();
+    const kind = mode === "manual" ? "人工标注" : "自动标注";
+    const button = $("#taskCreateSubmit");
+    button.disabled = true;
+    status("#taskCreateStatus", "正在创建…");
+    try {
+      const created = await call(() => sdk.createTask(current.id, {
+        name: $("#taskCreateName").value.trim() || undefined,
+        imageIds,
+        mode,
+      }));
+      // 建出来还是 draft，这里顺手提交，省掉「建完再去列表里点提交」这一步。
+      const task = await call(() => sdk.submitTask(current.id, created.id));
+      closeDialog($("#taskCreateDialog"));
+      status("#projectTaskStatus", `已提交${kind}任务「${task.name || `任务 #${task.id}`}」，共 ${imageIds.length} 张图片`);
+      loaded.overview = false;
+      await loadTasks();
+    } catch (error) {
+      status("#taskCreateStatus", error.message, true);
       button.disabled = false;
     }
   }
@@ -398,19 +650,16 @@
     }
   }
 
-  /* ---------------- 设置 ---------------- */
+  /* ---------------- 类目 ---------------- */
 
-  async function loadSettings() {
-    $("#projectNameInput").value = current.name;
-    $("#projectDescInput").value = current.description || "";
-    $("#projectReviewerInput").value = current.default_reviewer || "submitter";
+  async function loadCategories() {
     const categories = await call(() =>
       sdk.listCategories(current.id, { includeDisabled: true })
     );
     const list = $("#projectCategories");
     list.replaceChildren();
     if (!categories.length) {
-      list.append(el("li", "project-line is-muted", "还没有类目，自动标注前先加一个。"));
+      list.append(el("li", "project-line is-muted", "还没有类目。自动标注要靠它出框，人工标注也从这里取色板，先加一个。"));
     } else {
       categories.forEach((category) => {
         const li = el("li", "project-category");
@@ -423,7 +672,8 @@
           remove.disabled = true;
           try {
             await call(() => sdk.deleteCategory(current.id, category.id));
-            await loadSettings();
+            loaded.overview = false;
+            await loadCategories();
           } catch (error) {
             status("#projectCategoryStatus", error.message, true);
             remove.disabled = false;
@@ -433,6 +683,21 @@
         list.append(li);
       });
     }
+    const meta = $("#projectCategoriesMeta");
+    if (meta) {
+      meta.textContent = categories.length
+        ? `共 ${categories.length} 个类目 · 自动标注按这些类目检测（填了英文就用英文，留空自动翻译），人工标注从这里取色板`
+        : "还没有类目，先加一个再建任务。";
+    }
+    loaded.categories = true;
+  }
+
+  /* ---------------- 设置 ---------------- */
+
+  async function loadSettings() {
+    $("#projectNameInput").value = current.name;
+    $("#projectDescInput").value = current.description || "";
+    $("#projectReviewerInput").value = current.default_reviewer || "submitter";
     loaded.settings = true;
   }
 
@@ -454,15 +719,20 @@
 
   async function addCategory() {
     const input = $("#projectNewCategory");
+    const enInput = $("#projectNewCategoryEn");
     const name = input.value.trim();
+    const enName = enInput ? enInput.value.trim() : "";
     if (!name) return;
     const button = $("#projectCategoryAdd");
     button.disabled = true;
     try {
-      await call(() => sdk.createCategory(current.id, { zhName: name }));
+      // 填了英文就按填的检测（不留翻译的余地），留空则由后端翻译中文名。
+      await call(() => sdk.createCategory(current.id, { zhName: name, enName }));
       input.value = "";
-      status("#projectCategoryStatus", "已添加");
-      await loadSettings();
+      if (enInput) enInput.value = "";
+      status("#projectCategoryStatus", enName ? `已添加，检测提示词「${enName}」` : "已添加，将自动翻译中文名");
+      loaded.overview = false;
+      await loadCategories();
     } catch (error) {
       status("#projectCategoryStatus", error.message, true);
     } finally {
@@ -529,6 +799,8 @@
 
   function openDrawer(kind) {
     const drawer = $("#spaceDrawer");
+    // 同时只开一个抽屉，否则两层遮罩会叠在一起
+    window.VSNotifications?.close?.();
     drawer.hidden = false;
     $("#spaceDrawerKicker").textContent = kind === "team" ? "TEAM SETTINGS" : "ENTERPRISE SETTINGS";
     $("#spaceDrawerTitle").textContent = kind === "team" ? "小组空间设置" : "企业空间设置";
@@ -566,10 +838,26 @@
     button.addEventListener("click", () => switchTab(button.dataset.projectTab));
   });
   $("#projectJumpTasks").addEventListener("click", () => switchTab("tasks"));
-  $("#projectNewTask").addEventListener("click", createTask);
+  $("#projectNewTask").addEventListener("click", openTaskCreate);
+  $("#taskPickAll").addEventListener("click", () => pickAll(true));
+  $("#taskPickNone").addEventListener("click", () => pickAll(false));
+  $("#taskCreateSubmit").addEventListener("click", submitTaskCreate);
+  $("#closeTaskCreate").addEventListener("click", () => closeDialog($("#taskCreateDialog")));
+  $("#projectTaskFilter").addEventListener("change", () => {
+    taskFilter = $("#projectTaskFilter").value;
+    loadTasks().catch((error) => status("#projectTaskStatus", error.message, true));
+  });
   $("#projectAddMember").addEventListener("click", addMember);
   $("#projectSettingsForm").addEventListener("submit", saveSettings);
   $("#projectCategoryAdd").addEventListener("click", addCategory);
+  ["#projectNewCategory", "#projectNewCategoryEn"].forEach((selector) => {
+    $(selector)?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        addCategory();
+      }
+    });
+  });
   $("#projectDangerArchive").addEventListener("click", archiveProject);
   $("#projectArchive").addEventListener("click", archiveProject);
 
@@ -610,6 +898,12 @@
     activeSpace: () => activeSpace,
     open: openProject,
     closeDrawer,
+    /** 标注工作台保存 / 结束任务后回来，让任务列表跟上最新状态。 */
+    refreshTasks: () => {
+      loaded.overview = false;
+      if (!current) return Promise.resolve();
+      return loadTasks().catch(() => {});
+    },
   };
 
   // 首屏默认停在个人空间；app.js 启动时 projects.js 还没加载，这里补一次

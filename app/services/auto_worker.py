@@ -164,9 +164,8 @@ def annotate_task(db, task, *, worker_id: str | None = None) -> int:
 
     detector = get_detector()
     specs = category_specs(categories)
-    need_translation = config.translate_enabled or any(
-        not spec.en_name.strip() for spec in specs
-    )
+    # 有英文提示词的类目直接用，只有空着的那几个才需要翻译（见 build_prompts）。
+    need_translation = any(not spec.en_name.strip() for spec in specs)
     translator = get_translator() if need_translation else None
 
     rows = task_image_crud.list_task_images(db, task.id)

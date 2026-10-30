@@ -26,6 +26,7 @@ from app.schemas.task import (
     TaskCreate,
     TaskDetailRead,
     TaskImageAttach,
+    TaskListItem,
     TaskMode,
     TaskRead,
     TaskStatus,
@@ -96,7 +97,7 @@ def _load_task_image(db: Session, task: Task, task_image_id: int) -> TaskImage:
 # ---- 任务 ----
 
 
-@router.get('', response_model=list[TaskRead])
+@router.get('', response_model=list[TaskListItem])
 def list_project_tasks(
     project_id: int,
     account: CurrentAccount,
@@ -105,18 +106,32 @@ def list_project_tasks(
     mode: TaskMode | None = None,
     assignee_account_id: Annotated[int | None, Query(gt=0)] = None,
     assigned_to_me: bool = False,
-) -> list[Task]:
-    '''项目里的任务列表；可按状态 / 类型 / 指派人过滤。'''
+) -> list[TaskListItem]:
+    '''项目里的任务列表；可按状态 / 类型 / 指派人过滤。
+
+    顺带带回每个任务的图片总数与已标注数，前端列表据此直接画进度，
+    不必为每一行再拉一次详情。
+    '''
     require_view(db, account, project_id)
     if assigned_to_me:
         assignee_account_id = account.id
-    return task_crud.list_project_tasks(
+    tasks = task_crud.list_project_tasks(
         db,
         project_id,
         status=task_status,
         mode=mode,
         assignee_account_id=assignee_account_id,
     )
+    progress = task_image_crud.progress_by_task(db, [task.id for task in tasks])
+    items: list[TaskListItem] = []
+    for task in tasks:
+        total, done = progress.get(task.id, (0, 0))
+        items.append(
+            TaskListItem.model_validate(task).model_copy(
+                update={'image_total': total, 'image_annotated': done}
+            )
+        )
+    return items
 
 
 @router.post('', response_model=TaskRead, status_code=status.HTTP_201_CREATED)

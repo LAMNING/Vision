@@ -14,7 +14,9 @@ __all__ = [
     'TaskCreate',
     'TaskUpdate',
     'TaskRead',
+    'TaskListItem',
     'TaskDetailRead',
+    'ImageTaskRef',
     'MyTaskRead',
     'TaskImageAttach',
     'TaskFailRequest',
@@ -88,10 +90,37 @@ class TaskRead(ORMModel):
     completed_at: datetime | None
 
 
+class TaskListItem(TaskRead):
+    '''任务列表项：额外带图片总数与已标注数。
+
+    列表里要显示「已标注 5 / 12」这种进度，但每次打开列表都去拉详情太重，
+    所以在列表响应里直接把两个计数带上（由路由层一次聚合查询算出）。
+    '''
+
+    image_total: int = 0
+    image_annotated: int = 0
+
+
 class TaskDetailRead(TaskRead):
     '''任务详情：带任务内的图片（含图片元数据）。'''
 
     images: list[TaskImageRead] = Field(default_factory=list)
+
+
+class ImageTaskRef(ORMModel):
+    '''「这张图在哪些任务里」。
+
+    看图页要提供「在标注台打开」，得先知道这张图落在了哪个任务、对应哪条
+    task_image、以及能不能改；一次查完，前端不用自己拼。
+    '''
+
+    task_id: int
+    task_name: str | None
+    task_status: TaskStatus
+    task_mode: TaskMode
+    task_image_id: int
+    annotation_status: str
+    review_status: str
 
 
 class MyTaskRead(TaskRead):

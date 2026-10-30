@@ -38,6 +38,13 @@
           <span class="rail-label">平台管理</span>
         </button>
         <span class="rail-divider" aria-hidden="true"></span>
+        <button id="railNotifications" type="button" aria-label="通知">
+          <span class="rail-icon">
+            <span class="material-symbols-rounded" aria-hidden="true">notifications</span>
+            <span class="rail-badge" id="notifBadge" hidden>0</span>
+          </span>
+          <span class="rail-label">通知</span>
+        </button>
         <button id="railSettings" type="button" aria-label="设置">
           <span class="material-symbols-rounded" aria-hidden="true">settings</span>
           <span class="rail-label">设置</span>
@@ -339,10 +346,12 @@
               <button class="ent-tab" type="button" role="tab" aria-selected="false" data-project-tab="images">图像</button>
               <button class="ent-tab" type="button" role="tab" aria-selected="false" data-project-tab="tasks">任务</button>
               <button class="ent-tab" type="button" role="tab" aria-selected="false" data-project-tab="members">成员</button>
+              <button class="ent-tab" type="button" role="tab" aria-selected="false" data-project-tab="categories">类目</button>
               <button class="ent-tab" type="button" role="tab" aria-selected="false" data-project-tab="settings">设置</button>
             </div>
 
             <section class="project-pane" data-project-pane="overview">
+              <div class="project-next" id="projectNext" hidden></div>
               <div class="admin-stats project-stats" id="projectStats"></div>
               <article class="panel admin-panel">
                 <div class="panel-head">
@@ -359,10 +368,24 @@
               <article class="panel admin-panel">
                 <div class="panel-head">
                   <div><h3>任务</h3><p class="panel-sub" id="projectTasksMeta">—</p></div>
-                  <button class="secondary-button" id="projectNewTask" type="button">用全部图片新建任务</button>
+                  <div class="panel-head-actions">
+                    <select id="projectTaskFilter" class="task-filter" aria-label="按状态筛选任务">
+                      <option value="">全部状态</option>
+                      <option value="queued">待标注</option>
+                      <option value="auto_annotating">标注中</option>
+                      <option value="auto_annotated">待复核</option>
+                      <option value="rejected_fix">退回修改</option>
+                      <option value="rejected_reannotate">退回重标</option>
+                      <option value="failed">失败</option>
+                      <option value="draft">草稿</option>
+                      <option value="approved">已通过</option>
+                      <option value="cancelled">已取消</option>
+                    </select>
+                    <button class="secondary-button" id="projectNewTask" type="button">新建任务</button>
+                  </div>
                 </div>
-                <div class="project-task-list" id="projectTaskList"></div>
                 <p class="settings-status" id="projectTaskStatus" role="status"></p>
+                <div class="project-task-list" id="projectTaskList"></div>
               </article>
             </section>
 
@@ -382,6 +405,26 @@
                   <p class="settings-status admin-toolbar-status" id="projectMemberStatus" role="status"></p>
                 </div>
                 <ul class="member-list project-member-list" id="projectMemberList"></ul>
+              </article>
+            </section>
+
+            <!-- 识别类目是项目的核心对象（自动标注的 prompt 来源 + 人工标注的色板），
+                 从「设置」里提出来单独一页，别和归档这种运维项挤在一起。 -->
+            <section class="project-pane" data-project-pane="categories" hidden>
+              <article class="panel admin-panel">
+                <div class="panel-head">
+                  <div>
+                    <h3>识别类目</h3>
+                    <p class="panel-sub" id="projectCategoriesMeta">自动标注按这些类目检测，人工标注从这里取色板。</p>
+                  </div>
+                </div>
+                <div class="admin-toolbar">
+                  <input id="projectNewCategory" type="search" maxlength="50" placeholder="新增类目（中文名）" aria-label="新增类目" />
+                  <input id="projectNewCategoryEn" type="search" maxlength="100" placeholder="英文提示词（可选，留空自动翻译）" aria-label="英文提示词" />
+                  <button class="secondary-button" id="projectCategoryAdd" type="button">添加</button>
+                  <p class="settings-status admin-toolbar-status" id="projectCategoryStatus" role="status"></p>
+                </div>
+                <ul class="project-category-list" id="projectCategories"></ul>
               </article>
             </section>
 
@@ -405,15 +448,9 @@
                 </form>
 
                 <div class="panel admin-panel">
-                  <div class="panel-head"><div><h3>识别类目</h3><p class="panel-sub">自动标注按这些类目检测。</p></div></div>
-                  <div class="admin-toolbar">
-                    <input id="projectNewCategory" type="search" maxlength="50" placeholder="新增类目（中文名）" aria-label="新增类目" />
-                    <button class="secondary-button" id="projectCategoryAdd" type="button">添加</button>
-                  </div>
-                  <ul class="project-category-list" id="projectCategories"></ul>
-                  <p class="settings-status" id="projectCategoryStatus" role="status"></p>
+                  <div class="panel-head"><div><h3>归档项目</h3><p class="panel-sub">归档后不出现在默认列表里，数据和图片都保留。</p></div></div>
                   <div class="project-danger">
-                    <div><strong>归档项目</strong><p>归档后不出现在默认列表里，数据和图片都保留。</p></div>
+                    <div><strong>归档这个项目</strong><p>需要时可以找管理员恢复。</p></div>
                     <button class="delete-button compact-delete" id="projectDangerArchive" type="button">归档</button>
                   </div>
                 </div>
@@ -622,9 +659,54 @@
                 <div><dt>文件大小</dt><dd id="detailSize">—</dd></div>
                 <div><dt>分析状态</dt><dd id="detailAnalysis">等待提交分析</dd></div>
               </dl>
+              <button class="secondary-button wide-button" id="detailAnnotate" type="button" hidden>在标注台打开</button>
               <button class="secondary-button wide-button" id="downloadAnnotated" type="button">下载标注图</button>
               <button class="secondary-button wide-button" id="sendToGroup" type="button">上传到小组库</button>
               <button class="delete-button" id="deleteImageButton" type="button">删除图片</button>
+            </aside>
+          </div>
+        </section>
+
+        <!-- 人工标注工作台：和图片详情一样盖在内容区上面，左选图 / 中画框 / 右选类目 -->
+        <section class="detail-view annotate-view" id="annotateView" hidden aria-labelledby="annotateTitle">
+          <header class="annotate-head">
+            <button class="back-button" id="annotateBack" type="button">← 返回任务</button>
+            <div class="annotate-head-main">
+              <p class="section-kicker">MANUAL ANNOTATION</p>
+              <h1 id="annotateTitle">人工标注</h1>
+            </div>
+            <div class="annotate-head-side">
+              <span class="annotate-progress" id="annotateProgress"></span>
+              <button class="primary-button" id="annotateFinish" type="button" hidden>完成标注</button>
+            </div>
+          </header>
+
+          <div class="annotate-layout">
+            <aside class="annotate-rail" id="annotateRails" aria-label="任务里的图片"></aside>
+
+            <div class="annotate-stage-wrap">
+              <div class="annotate-stage">
+                <div class="annotate-canvas" id="annotateCanvas">
+                  <img id="annotateImage" alt="待标注图片" draggable="false" />
+                </div>
+              </div>
+              <p class="settings-status annotate-status" id="annotateStatus" role="status"></p>
+            </div>
+
+            <aside class="annotate-panel">
+              <div class="annotate-block">
+                <p class="section-kicker">类目</p>
+                <div class="annotate-categories" id="annotateCategories"></div>
+              </div>
+              <div class="annotate-block">
+                <p class="section-kicker">标注框</p>
+                <div class="annotate-boxlist" id="annotateBoxList"></div>
+              </div>
+              <div class="annotate-actions">
+                <button class="secondary-button" id="annotateUndo" type="button">撤销</button>
+                <button class="primary-button" id="annotateSave" type="button">保存标注</button>
+              </div>
+              <p class="annotate-hint">拖空白处画新框；拖动框体移动、拖四角改大小；选中后按 Delete 删除、方向键微调、Esc 退出。切换图片前记得先保存。</p>
             </aside>
           </div>
         </section>
@@ -641,53 +723,67 @@
         <h2 id="targetSettingsTitle">设置识别目标</h2>
         <p class="dialog-description">这套目标保存在“图像数据”项目中。以后上传图片时会自动带出，也可以临时修改后再分析。</p>
         <form id="targetSettingsForm" class="settings-form">
-          <label for="projectTargets">需要识别什么</label>
-          <textarea id="projectTargets" maxlength="300" rows="4" placeholder="例如：行人、汽车、交通标志"></textarea>
-          <p class="settings-help">用逗号、顿号或换行分隔，最多 20 项。</p>
+          <div class="target-list-head">
+            <span class="target-list-title">识别目标</span>
+          </div>
+          <p class="settings-help">一行一个目标：中文名用于界面显示，英文提示词喂给模型。英文留空会自动按中文名翻译。</p>
+          <ul class="target-rows" id="targetRows"></ul>
+          <p class="target-empty" id="targetEmpty" hidden>还没有识别目标，先在下面加一条。</p>
+          <div class="target-add">
+            <input id="targetNewZh" type="search" maxlength="50" placeholder="中文名，例如 行人" aria-label="新目标的中文名" autocomplete="off" />
+            <input id="targetNewEn" type="search" maxlength="100" placeholder="英文提示词（可选）" aria-label="新目标的英文提示词" autocomplete="off" />
+            <button id="targetAddButton" class="secondary-button" type="button">添加</button>
+          </div>
+          <div class="target-threshold">
+            <div class="target-threshold-head">
+              <label for="projectBoxThreshold">置信度阈值</label>
+              <output id="projectBoxThresholdValue" for="projectBoxThreshold">0.30</output>
+            </div>
+            <input id="projectBoxThreshold" type="range" min="0.05" max="0.95" step="0.05" value="0.30" />
+            <p class="settings-help">调高只保留更确定的框，调低能多召回一些弱目标，但也会多出误框。默认 0.30。</p>
+          </div>
           <div class="settings-actions"><p id="projectTargetsStatus" class="settings-status" role="status"></p><button class="primary-button" id="saveProjectTargets" type="submit">保存识别方案</button></div>
         </form>
       </section>
     </div>
 
     <!-- 个人资料与账号 -->
-    <div class="dialog-backdrop" id="profileDialog" hidden>
-      <section class="dialog settings-dialog profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profileDialogTitle">
-        <button class="dialog-close" id="closeProfileDialog" type="button" aria-label="关闭">×</button>
-        <p class="section-kicker">PERSONAL ACCOUNT</p>
-        <h2 id="profileDialogTitle">个人资料与账号</h2>
-        <p class="dialog-description">可以修改展示名称与联系方式。用户名作为登录账号暂不更改。</p>
-
-        <div class="avatar-editor">
-          <span class="avatar avatar-64" id="profileAvatar" aria-hidden="true">·</span>
-          <div class="avatar-editor-copy">
-            <strong>头像</strong>
-            <p class="settings-help">JPG、PNG、WEBP，4 MB 以内。组员会在成员列表里看到它。</p>
-            <div class="avatar-editor-actions">
-              <button class="secondary-button" id="pickAvatar" type="button">更换头像</button>
-              <button class="text-button" id="removeAvatar" type="button" hidden>移除头像</button>
-            </div>
-          </div>
-          <input id="avatarInput" type="file" accept="image/jpeg,image/png,image/webp" hidden />
-        </div>
-
-        <form id="profileForm" class="settings-form">
-          <label for="profileUsername">用户名</label><input id="profileUsername" type="text" readonly />
-          <label for="profileDisplayName">展示名称</label><input id="profileDisplayName" type="text" maxlength="50" placeholder="老师和组员看到的名称" />
-          <div class="settings-two-cols"><div><label for="profileEmail">邮箱</label><input id="profileEmail" type="email" maxlength="50" placeholder="可选" /></div><div><label for="profilePhone">手机号</label><input id="profilePhone" type="tel" maxlength="30" placeholder="可选" /></div></div>
-          <div class="settings-actions"><p id="profileStatus" class="settings-status" role="status"></p><button class="primary-button" type="submit">保存资料</button></div>
-        </form>
-      </section>
-    </div>
-
-    <!-- 设置：外观与主题、账号安全 -->
+    <!-- 设置：个人资料、外观与主题、账号安全（同一个弹窗，侧栏两个入口各自定位到对应小节） -->
     <div class="dialog-backdrop" id="settingsDialog" hidden>
       <section class="dialog settings-dialog settings-hub" role="dialog" aria-modal="true" aria-labelledby="settingsDialogTitle">
         <button class="dialog-close" id="closeSettingsDialog" type="button" aria-label="关闭">×</button>
         <p class="section-kicker">SETTINGS</p>
         <h2 id="settingsDialogTitle">设置</h2>
-        <p class="dialog-description">外观与账号安全都在这里。个人资料和头像在左侧「个人与账号」里。</p>
+        <p class="dialog-description" id="profileDescription">个人资料、外观与账号安全都在这里。</p>
 
-        <section class="theme-settings" aria-labelledby="themeSettingsTitle">
+        <section class="settings-block" id="settingsProfileSection" aria-labelledby="settingsProfileTitle">
+          <div class="theme-settings-head">
+            <div><h3 id="settingsProfileTitle">个人资料</h3><p>用户名作为登录账号暂不更改。</p></div>
+            <span class="material-symbols-rounded" aria-hidden="true">badge</span>
+          </div>
+
+          <div class="avatar-editor">
+            <span class="avatar avatar-64" id="profileAvatar" aria-hidden="true">·</span>
+            <div class="avatar-editor-copy">
+              <strong>头像</strong>
+              <p class="settings-help">JPG、PNG、WEBP，4 MB 以内。组员会在成员列表里看到它。</p>
+              <div class="avatar-editor-actions">
+                <button class="secondary-button" id="pickAvatar" type="button">更换头像</button>
+                <button class="text-button" id="removeAvatar" type="button" hidden>移除头像</button>
+              </div>
+            </div>
+            <input id="avatarInput" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+          </div>
+
+          <form id="profileForm" class="settings-form">
+            <label for="profileUsername">用户名</label><input id="profileUsername" type="text" readonly />
+            <label for="profileDisplayName">展示名称</label><input id="profileDisplayName" type="text" maxlength="50" placeholder="老师和组员看到的名称" />
+            <div class="settings-two-cols"><div><label for="profileEmail">邮箱</label><input id="profileEmail" type="email" maxlength="50" placeholder="可选" /></div><div><label for="profilePhone">手机号</label><input id="profilePhone" type="tel" maxlength="30" placeholder="可选" /></div></div>
+            <div class="settings-actions"><p id="profileStatus" class="settings-status" role="status"></p><button class="primary-button" type="submit">保存资料</button></div>
+          </form>
+        </section>
+
+        <section class="theme-settings settings-block" id="settingsThemeSection" aria-labelledby="themeSettingsTitle">
           <div class="theme-settings-head">
             <div><h3 id="themeSettingsTitle">外观与主题</h3><p>主题只改变界面外观，不会影响图片和分析数据。</p></div>
             <span class="material-symbols-rounded" aria-hidden="true">palette</span>
@@ -711,13 +807,18 @@
           </div>
         </section>
 
-        <form id="passwordForm" class="settings-form settings-divider">
-          <h3>账号安全</h3><p class="settings-help">修改密码后当前登录会失效，需要用新密码重新登录。</p>
-          <label for="oldPassword">当前密码</label><input id="oldPassword" type="password" autocomplete="current-password" required />
-          <label for="newPassword">新密码</label><input id="newPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required />
-          <label for="confirmPassword">确认新密码</label><input id="confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required />
-          <div class="settings-actions"><p id="passwordStatus" class="settings-status" role="status"></p><button class="secondary-button" type="submit">修改密码</button></div>
-        </form>
+        <section class="settings-block" id="settingsSecuritySection" aria-labelledby="settingsSecurityTitle">
+          <div class="theme-settings-head">
+            <div><h3 id="settingsSecurityTitle">账号安全</h3><p>修改密码后当前登录会失效，需要用新密码重新登录。</p></div>
+            <span class="material-symbols-rounded" aria-hidden="true">lock</span>
+          </div>
+          <form id="passwordForm" class="settings-form">
+            <label for="oldPassword">当前密码</label><input id="oldPassword" type="password" autocomplete="current-password" required />
+            <label for="newPassword">新密码</label><input id="newPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required />
+            <label for="confirmPassword">确认新密码</label><input id="confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required />
+            <div class="settings-actions"><p id="passwordStatus" class="settings-status" role="status"></p><button class="secondary-button" type="submit">修改密码</button></div>
+          </form>
+        </section>
       </section>
     </div>
 
@@ -941,6 +1042,36 @@
       </aside>
     </div>
 
+    <!-- 通知抽屉：任务指派 / 待标注 / 待复核 / 逾期 / 邀请 / 系统消息 -->
+    <div class="space-drawer notif-drawer" id="notifDrawer" hidden>
+      <div class="space-drawer-scrim" id="notifScrim"></div>
+      <aside class="space-drawer-panel notif-panel" role="dialog" aria-modal="true" aria-labelledby="notifTitle">
+        <header class="space-drawer-head">
+          <div>
+            <p class="section-kicker">NOTIFICATIONS</p>
+            <h2 id="notifTitle">通知</h2>
+          </div>
+          <div class="notif-head-actions">
+            <button class="mini-button" id="notifReadAll" type="button">全部已读</button>
+            <button class="dialog-close" id="notifClose" type="button" aria-label="关闭">×</button>
+          </div>
+        </header>
+        <div class="space-drawer-body notif-drawer-body">
+          <div class="notif-toolbar">
+            <div class="notif-tabs" role="tablist" aria-label="通知筛选">
+              <button class="notif-tab is-active" id="notifTabAll" type="button" role="tab" aria-selected="true">全部</button>
+              <button class="notif-tab" id="notifTabUnread" type="button" role="tab" aria-selected="false">未读</button>
+            </div>
+            <span class="notif-count" id="notifCount"></span>
+          </div>
+          <ul class="notif-list" id="notifList"></ul>
+          <p class="notif-empty" id="notifEmpty" hidden></p>
+          <p class="settings-status" id="notifStatus" role="status"></p>
+          <button class="secondary-button notif-more" id="notifMore" type="button" hidden>加载更多</button>
+        </div>
+      </aside>
+    </div>
+
     <!-- 新建项目 -->
     <div class="dialog-backdrop" id="projectCreateDialog" hidden>
       <section class="dialog settings-dialog" role="dialog" aria-modal="true" aria-labelledby="projectCreateTitle">
@@ -958,6 +1089,44 @@
             <button class="primary-button" type="submit">创建项目</button>
           </div>
         </form>
+      </section>
+    </div>
+
+    <!-- 新建任务：名称 + 模式 + 图片范围，替代原来「一键抓全部图片」的两个按钮 -->
+    <div class="dialog-backdrop" id="taskCreateDialog" hidden>
+      <section class="dialog settings-dialog task-create-dialog" role="dialog" aria-modal="true" aria-labelledby="taskCreateTitle">
+        <button class="dialog-close" id="closeTaskCreate" type="button" aria-label="关闭">×</button>
+        <p class="section-kicker">NEW TASK</p>
+        <h2 id="taskCreateTitle">新建标注任务</h2>
+        <p class="dialog-description">自动任务提交后由模型先出框、再等人工复核；人工任务直接进标注工作台，由标注员画框。</p>
+        <div class="settings-form task-create-form">
+          <label for="taskCreateName">任务名称 <span class="optional">可选</span></label>
+          <input id="taskCreateName" type="text" maxlength="100" placeholder="留空则按标注方式自动命名" />
+          <label>标注方式</label>
+          <div class="task-mode-group" role="radiogroup" aria-label="标注方式">
+            <label class="task-mode">
+              <input type="radio" name="taskCreateMode" value="auto" checked />
+              <span><strong>自动预标注</strong><small>模型按识别类目出框</small></span>
+            </label>
+            <label class="task-mode">
+              <input type="radio" name="taskCreateMode" value="manual" />
+              <span><strong>人工标注</strong><small>在工作台里手动画框</small></span>
+            </label>
+          </div>
+          <div class="task-pick-head">
+            <span class="task-pick-title">图片范围 <b id="taskPickCount">—</b></span>
+            <span class="task-pick-actions">
+              <button class="text-button" id="taskPickAll" type="button">全选</button>
+              <button class="text-button" id="taskPickNone" type="button">全不选</button>
+            </span>
+          </div>
+          <div class="task-pick-list" id="taskPickList"></div>
+          <p class="task-create-hint" id="taskCreateHint" hidden></p>
+          <div class="settings-actions">
+            <p class="settings-status" id="taskCreateStatus" role="status"></p>
+            <button class="primary-button" id="taskCreateSubmit" type="button">创建任务</button>
+          </div>
+        </div>
       </section>
     </div>
 
@@ -984,5 +1153,7 @@
     <script src="enterprise.js"></script>
     <script src="admin.js"></script>
     <script src="projects.js"></script>
+    <script src="annotate.js"></script>
+    <script src="notifications.js"></script>
   </body>
 </html>

@@ -2,7 +2,8 @@
 // 所有请求走 VS.sdk，不在这里拼 URL。
 (() => {
   const $ = (selector) => document.querySelector(selector);
-  const profileDialog = $("#profileDialog");
+  // 资料、外观、密码现在是同一个设置弹窗里的三节
+  const settingsDialog = $("#settingsDialog");
   const { status, runForm, submitButtonOf, sdk, call, forgetAvatar, fillAvatar } = VS;
   let me = null;
 
@@ -23,9 +24,9 @@
     if (editor) editor.hidden = !avatar;
 
     const desc = profile
-      ? "可以修改展示名称与联系方式。用户名作为登录账号暂不更改。"
+      ? "个人资料、外观与账号安全都在这里。用户名作为登录账号暂不更改。"
       : "可以修改联系方式与登录密码。用户名作为登录账号暂不更改。";
-    const descNode = $("#profileDialog .dialog-description");
+    const descNode = $("#profileDescription");
     if (descNode) descNode.textContent = desc;
   }
 
@@ -50,7 +51,7 @@
     }
   }
 
-  profileDialog.addEventListener("vision:open", loadProfile);
+  settingsDialog.addEventListener("vision:open", loadProfile);
 
   // 资料改完要同步三处：顶栏、小组页成员条、本弹窗自己的头像区
   function broadcast() {
