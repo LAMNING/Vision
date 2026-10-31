@@ -178,7 +178,8 @@
 
     if (item.resource_type === "invitation" && unread) {
       const actions = el("div", "notif-actions");
-      const accept = el("button", "mini-button is-accent", "接受");
+      // 语义色统一：接受 = 通过类（绿），拒绝 = 破坏类（红）；「打开工作台」才用 is-accent 蓝
+      const accept = el("button", "mini-button is-pass", "接受");
       accept.type = "button";
       const reject = el("button", "mini-button is-reject", "拒绝");
       reject.type = "button";

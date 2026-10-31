@@ -174,9 +174,9 @@ def auto_approve(
 
     逐图补一条 approve（不留复核人，`reviewed_by_account_id = NULL`），
     再写一条 approve 的 Review 记录，这样历史里仍然能看到它是怎么通过的。
-    若还有图没标完 / 任务不在 auto_annotated，就什么都不做，交给正常复核流程。
+    逐图没标完 / 任务不在 auto_annotated，就什么也不做，交回正常流程。
     '''
-    if task.status != 'auto_annotated' or task.review_required:
+    if task.review_required:
         return None
 
     images = ti.list_task_images(db, task.id)
@@ -185,7 +185,6 @@ def auto_approve(
     if any(row.annotation_status != 'annotated' for row in images):
         return None
 
-    actor = actor_account_id if actor_account_id is not None else task.submitter_account_id
     for row in images:
         if row.review_status != 'approved':
             ti.set_review(
@@ -196,13 +195,71 @@ def auto_approve(
                 commit=False,
             )
 
+    return _write_approval(
+        db,
+        task,
+        actor_account_id=actor_account_id,
+        comment=comment,
+        count=len(images),
+        commit=commit,
+    )
+
+
+def finalize_approved(
+    db: Session,
+    task: Task,
+    *,
+    actor_account_id: int | None = None,
+    comment: str = '逐图复核全部通过',
+    commit: bool = True,
+) -> Review | None:
+    '''逐图都有结论且全部通过时收口：补一条 approve 记录并把任务推到 approved。
+
+    与 `auto_approve` 的差别是**不看** `review_required` —— 调用方已经确认每张图都被
+    人复核过（图像 tab 逐图「审核」、复核工作台逐图「通过这张」），再让人回任务里点一次
+    「通过任务」纯属重复，而且会留下「图像里已经审完、任务列表还是待复核」的错位感。
+    只要还有一张没通过（未审核 / 已退回 / 未标注），就什么也不做。
+    '''
+    if task.status != 'auto_annotated':
+        return None
+
+    images = ti.list_task_images(db, task.id)
+    if not images:
+        return None
+    if any(row.annotation_status != 'annotated' for row in images):
+        return None
+    if any(row.review_status != 'approved' for row in images):
+        return None
+
+    return _write_approval(
+        db,
+        task,
+        actor_account_id=actor_account_id,
+        comment=comment,
+        count=len(images),
+        commit=commit,
+    )
+
+
+def _write_approval(
+    db: Session,
+    task: Task,
+    *,
+    actor_account_id: int | None,
+    comment: str,
+    count: int,
+    commit: bool,
+) -> Review:
+    '''auto_approve / finalize_approved 共用的收口写库（建 Review + 改状态 + 审计）。'''
+    actor = actor_account_id if actor_account_id is not None else task.submitter_account_id
+
     review = Review(
         task_id=task.id,
         reviewer_account_id=actor,
         round=next_round(db, task.id),
         decision='approve',
         comment=comment,
-        approved_count=len(images),
+        approved_count=count,
         rejected_count=0,
     )
     db.add(review)
@@ -218,7 +275,7 @@ def auto_approve(
         resource_id=review.id,
         actor_account_id=actor,
         group_id=task.project.group_id if task.project is not None else None,
-        after={'decision': 'approve', 'images': len(images)},
+        after={'decision': 'approve', 'images': count},
     )
 
     if commit:
@@ -233,6 +290,11 @@ _REVIEW_TITLES = {
     'reject_fix': '任务被退回修正',
     'reject_reannotate': '任务被退回重新标注',
 }
+
+
+def notify_outcome(db: Session, task: Task, decision: str) -> None:
+    '''提交者 / 被指派人收到复核结果通知（供路由在 commit 之后调用）。'''
+    _notify_review_outcome(db, task, decision)
 
 
 def _notify_review_outcome(db: Session, task: Task, decision: str) -> None:

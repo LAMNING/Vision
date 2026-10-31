@@ -173,21 +173,36 @@ const brandEnterprise = document.querySelector("#brandEnterprise");
 const brandEntName = document.querySelector("#brandEntName");
 const brandEntId = document.querySelector("#brandEntId");
 
-function setEnterpriseBrand(ent) {
-  const on = !!(ent && ent.name);
-  document.documentElement.classList.toggle("has-enterprise", on);
-  brandEnterprise.hidden = !on;
-  if (!on) {
-    brandEntName.textContent = "—";
-    brandEntId.textContent = "—";
-    return;
-  }
-  brandEntName.textContent = ent.name;
-  brandEntId.textContent = `ENT-${ent.id}`;
-  brandEnterprise.title = `${ent.name} · 企业 ID ENT-${ent.id}（${ent.my_role || "成员"}）`;
+// 最近一次拿到的企业身份。徽标回答的是「你在哪个企业里」，
+// 所以个人 / 小组 / 平台管理页都不该露出它（以前它会一路跟到平台管理页）。
+let enterpriseBrand = null;
+
+function enterpriseSpaceActive() {
+  if (currentView === "enterprise") return true;
+  if (currentView === "project") return window.VSProjects?.activeSpace?.() === "enterprise";
+  return false;
 }
 
-window.VSBrand = { setEnterprise: setEnterpriseBrand };
+function syncEnterpriseBrand() {
+  const known = !!(enterpriseBrand && enterpriseBrand.name);
+  document.documentElement.classList.toggle("has-enterprise", known);
+  brandEnterprise.hidden = !known || !enterpriseSpaceActive();
+}
+
+function setEnterpriseBrand(ent) {
+  enterpriseBrand = ent && ent.name ? ent : null;
+  if (!enterpriseBrand) {
+    brandEntName.textContent = "—";
+    brandEntId.textContent = "—";
+  } else {
+    brandEntName.textContent = enterpriseBrand.name;
+    brandEntId.textContent = `ENT-${enterpriseBrand.id}`;
+    brandEnterprise.title = `${enterpriseBrand.name} · 企业 ID ENT-${enterpriseBrand.id}（${enterpriseBrand.my_role || "成员"}）`;
+  }
+  syncEnterpriseBrand();
+}
+
+window.VSBrand = { setEnterprise: setEnterpriseBrand, sync: syncEnterpriseBrand };
 
 appAccount.addEventListener("click", () => openSettings("profile"));
 setAccountBadge(null);
@@ -261,6 +276,7 @@ function showView(view) {
   // 点工具轨切栏目时内容区仍是 hidden，看起来就是"点了没反应"。
   if (!detailView.hidden) closeImageDetail(true);
   window.VSAnnotate?.close?.(true);
+  window.VSTaskReview?.close?.(true);
   allDialogs.forEach((dialog) => {
     if (!dialog.hidden) closeDialog(dialog);
   });
@@ -285,10 +301,13 @@ function showView(view) {
   syncRail();
   // 切栏目时收起空间设置抽屉，免得它盖在新页面上
   window.VSProjects?.closeDrawer?.();
+  window.VSProjects?.closeMenus?.();
   if (view === "personal") window.VSProjects?.enter("personal");
   if (view === "team") window.VSProjects?.enter("team");
   if (view === "enterprise") window.VSProjects?.enter("enterprise");
   if (view === "admin" && window.VSAdmin) window.VSAdmin.enter();
+  // 企业徽标只在企业空间（以及企业里的项目页）出现，切到别的栏目就收掉
+  syncEnterpriseBrand();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -807,9 +826,23 @@ function openReview(image) {
       image.stage = result === "rejected" ? "rejected" : "approved";
       showUploadToast(
         result === "rejected" ? "已驳回这一张" : "已通过这一张",
-        result === "rejected" ? "标注员会在任务里看到你的原因" : "整批都通过后，去任务列表做任务级裁决"
+        result === "rejected"
+          ? "标注员会在任务里看到你的原因"
+          : "继续审下一张，全部通过后任务会自动通过"
       );
       loadImages({ force: true }).catch(() => {});
+      // 逐图全部通过时后端直接把任务推到 approved，任务列表要跟着变
+      window.VSProjects?.refreshTasks?.();
+      if (result !== "rejected") {
+        sdk
+          .getTask(activeProject?.id, image.task_id)
+          .then((task) => {
+            if (task?.status === "approved") {
+              showUploadToast("任务已通过复核", "所有图片都审过了，不用再回任务列表处理。");
+            }
+          })
+          .catch(() => {});
+      }
     },
   });
 }

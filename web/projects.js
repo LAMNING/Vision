@@ -75,6 +75,8 @@
     if (kind === "personal") await loadPersonal();
     if (kind === "team") await loadTeam();
     if (kind === "enterprise") await loadEnterprise();
+    // 企业徽标跟着空间走（只在企业空间 / 企业项目里出现）
+    window.VSBrand?.sync?.();
   }
 
   async function loadPersonal() {
@@ -143,7 +145,9 @@
           ? (kind === "team" ? "还没有小组" : "还没有加入企业")
           : "还没有项目"),
         el("p", "", noSpace
-          ? (kind === "team" ? "点右上角「空间设置」，在里面新建小组。" : "先用右上角创建企业，或凭企业码加入。")
+          ? (kind === "team"
+            ? "点右上角「⋯」→「空间设置」，在里面新建小组。"
+            : "点右上角「⋯」→「创建企业」，或凭企业码加入。")
           : "项目是图片、任务和成员的容器。点右上角「新建项目」开始。")
       );
       // 个人空间第一次进来时把整条链路摆出来，否则用户建完项目就不知道下一步了
@@ -203,6 +207,10 @@
     $("#projectRole").hidden = false;
     $("#projectArchive").hidden = !project.can_manage || project.status !== "active";
     $("#projectDangerArchive").disabled = !project.can_manage;
+
+    // 项目可能不属于当前停留的空间（通知里点开别的空间的任务就是这种情况），
+    // 先对齐空间，否则侧栏高亮和「← 返回空间」会指向错误的地方。
+    activeSpace = labelOf(project);
 
     showView("project");
     syncTabs();
@@ -389,10 +397,26 @@
       copy.append(el("strong", "", task.name || `任务 #${task.id}`));
 
       const meta = el("small", "project-task-meta");
-      meta.append(el("span", "task-chip", statusLabel(task)));
+      // 待复核的 chip 本身就是入口：审核员扫列表时最先看到的是状态，点它直达复核台
+      if (reviewEntryVisible(task, mine)) {
+        const chip = el("button", "task-chip is-action", statusLabel(task));
+        chip.type = "button";
+        chip.title = "进入复核工作台";
+        chip.addEventListener("click", () => openReviewWorkbench(task));
+        meta.append(chip);
+      } else {
+        meta.append(el("span", "task-chip", statusLabel(task)));
+      }
       meta.append(el("span", "", task.mode === "manual" ? "人工" : "自动"));
       if (task.image_total) {
         meta.append(el("span", "", `已标注 ${task.image_annotated} / ${task.image_total}`));
+      }
+      if (task.status === "auto_annotated" && task.image_total) {
+        // 逐图复核的进度：只写「待复核」看不出审到哪了
+        const reviewed = `复核 ${task.review_approved} / ${task.image_total} 张`;
+        meta.append(
+          el("span", "task-review-count", task.review_rejected ? `${reviewed} · 退回 ${task.review_rejected}` : reviewed)
+        );
       }
       const ownerId = task.assignee_account_id || task.submitter_account_id;
       if (ownerId) {
@@ -421,6 +445,12 @@
         annotate.addEventListener("click", () => window.VSAnnotate?.open({ projectId: current.id, taskId: task.id }));
         actions.append(annotate);
       }
+      if (reviewEntryVisible(task, mine)) {
+        const review = el("button", "mini-button is-pass", "复核");
+        review.type = "button";
+        review.addEventListener("click", () => openReviewWorkbench(task));
+        actions.append(review);
+      }
       if (task.status === "draft") {
         const submit = el("button", "mini-button", "提交");
         submit.type = "button";
@@ -446,6 +476,38 @@
       if (!actions.children.length) actions.append(el("span", "project-task-done", "已结束"));
       row.append(actions);
       box.append(row);
+    });
+  }
+
+  /**
+   * 「复核」入口：后端要求项目里是 reviewer/manager 才有资格，指派了具体复核人的
+   * 任务只有那个人（或 manager）能裁决 —— 与 review.py 的 _assert_reviewer_allowed 对齐。
+   * 身份没取到时照常露出，交给后端判定并给出中文提示。
+   * 能管项目就一定看得到（后端对 manager 放行）；这样即便 ProjectListItem 没带
+   * can_review（老接口 / 空间项目列表），入口也不会莫名消失。
+   */
+  function reviewEntryVisible(task, mine) {
+    if (task.status !== "auto_annotated") return false;
+    if (!current) return false;
+    if (!current.can_review && !current.can_manage) return false;
+    if (current.can_manage || !mine) return true;
+    return !task.reviewer_account_id || task.reviewer_account_id === mine.id;
+  }
+
+  /** 打开复核工作台；裁决回来把统计与列表一起刷新。 */
+  function openReviewWorkbench(task) {
+    window.VSTaskReview?.open({
+      projectId: current.id,
+      taskId: task.id,
+      onDone: (decision) => {
+        // 裁决会改写任务状态和统计，两个缓存一起作废
+        loaded.overview = false;
+        status(
+          "#projectTaskStatus",
+          decision === "approve" ? "任务已通过复核。" : "已退回，等标注员处理。"
+        );
+        loadTasks();
+      },
     });
   }
 
@@ -853,6 +915,49 @@
     window.VSTeamEnterprise?.leave();
   }
 
+  /* ---------------- 空间 header 的「更多」菜单 ---------------- */
+
+  // 空间设置 / 创建企业这类低频动作用一个菜单收起来。
+  // 打开一个就关掉其它的，点外面或按 Esc 也收起，避免菜单挂着挡住项目列表。
+  const spaceMenus = [];
+
+  function closeSpaceMenus() {
+    spaceMenus.forEach((close) => close());
+  }
+
+  function bindSpaceMenu(triggerId, listId) {
+    const trigger = $(triggerId);
+    const list = $(listId);
+    if (!trigger || !list) return;
+    const close = () => {
+      list.hidden = true;
+      trigger.setAttribute("aria-expanded", "false");
+    };
+    trigger.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const open = list.hidden;
+      closeSpaceMenus();
+      if (!open) return;
+      list.hidden = false;
+      trigger.setAttribute("aria-expanded", "true");
+    });
+    // 点中菜单项就收起菜单；动作本身由各自的监听器处理
+    list.addEventListener("click", (event) => {
+      if (event.target.closest(".space-menu-item")) close();
+    });
+    document.addEventListener("mousedown", (event) => {
+      if (list.hidden) return;
+      if (list.contains(event.target) || trigger.contains(event.target)) return;
+      close();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || list.hidden) return;
+      close();
+      trigger.focus();
+    });
+    spaceMenus.push(close);
+  }
+
   /* ---------------- 工具 ---------------- */
 
   function when(iso) {
@@ -902,9 +1007,10 @@
   $("#projectCreateForm").addEventListener("submit", submitCreate);
   $("#closeProjectCreate").addEventListener("click", () => closeDialog($("#projectCreateDialog")));
 
+  bindSpaceMenu("#teamSpaceMenu", "#teamSpaceMenuList");
+  bindSpaceMenu("#enterpriseSpaceMenu", "#enterpriseSpaceMenuList");
   $("#teamSpaceSettings").addEventListener("click", () => openDrawer("team"));
-  $("#enterpriseSpaceSettings").addEventListener("click", () => openDrawer("enterprise"));
-  $("#spaceDrawerClose").addEventListener("click", closeDrawer);
+  $("#enterpriseSpaceSettings").addEventListener("click", () => openDrawer("enterprise"));  $("#spaceDrawerClose").addEventListener("click", closeDrawer);
   $("#spaceDrawerScrim").addEventListener("click", closeDrawer);
 
   $("#teamSelect").addEventListener("change", async () => {
@@ -933,6 +1039,8 @@
     activeSpace: () => activeSpace,
     open: openProject,
     closeDrawer,
+    /** 切栏目时把「更多」菜单收起，免得它挂在新页面边上 */
+    closeMenus: closeSpaceMenus,
     /** 标注工作台保存 / 结束任务后回来，让任务列表跟上最新状态。 */
     refreshTasks: () => {
       loaded.overview = false;

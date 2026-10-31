@@ -23,6 +23,7 @@
 - `projects.js`：三个空间的项目列表、项目页六个 tab（概览 / 图像 / 任务 / 成员 / 类目 / 设置）、新建任务对话框、空间设置抽屉。
 - `annotate.js`：人工标注工作台（左选图 / 中画框 / 右选类目），负责拉取任务图片、编辑 bbox 并以整组覆盖的方式保存，最后「完成标注 / 重新提交 / 重新排队」。
 - `review.js`：单图复核弹窗（图像 tab 每行的「审核」）。拉这一张的标注框画在图上，逐张「通过 / 驳回」，驳回必须写原因（标注员会照着改）。
+- `taskreview.js`：任务级复核工作台（任务行状态为「待复核」时出现的「复核」按钮，任务列表里那枚「待复核」标签本身也可点）。左栏逐图看状态，中栏只读叠加标注框，右栏先逐图「通过这张 / 驳回这张」（驳回必须写原因），要退回再整任务「退回修改 / 退回重标」。**最后一张也通过时后端会把任务直接收口成已通过**（`review.finalize_approved`，补一条 comment 为「逐图复核全部通过」的 approve 记录），前端随即关闭工作台、回项目页刷新列表。
 - `notifications.js`：通知中心（左栏「通知」+ 右侧抽屉）。轮询未读数显示徽标，按 `resource_type` 跳转：`task` 打开任务所在项目，`invitation` 行内直接「接受 / 拒绝」。
 - `core.js`：后端地址、SDK 实例、错误翻译和公共工具。
 - `sdk.js`：FastAPI 接口封装。
@@ -51,6 +52,8 @@
    晴蓝与经典的规则都必须带 `html[data-theme="clear-sky"]` / `html[data-vision-theme="classic"]` 前缀，否则改动会漏到澄白上。
 3. **版式与动效参数集中在 `themes.css` 末尾的「全站统一层」。**
    内容列宽（`--layout-content`，1600px 以上自动加档到 1560）、标题阶梯（`--fs-display` / `--fs-page`）、动效时长（`--motion-fast` / `--motion-base` / `--motion-slow`）都在那里改一处、三套主题同时生效。
+4. **标题一律「中文在上、英文小标在下」。**
+   页面与弹窗的主标题用 `<h1>` / `<h2>`，紧随其后的 `.section-kicker` 放纯英文小标（如 `TASK REVIEW`）；顶栏是 `.app-context-title` + `.app-context-kicker`。间距由 `styles.css` 里 `h1 + .section-kicker, h2 + .section-kicker { margin: 4px 0 0 }` 统一给，新增成对标题时不要再把小标写在标题前面。中文小标签（类目 / 标注框 / 这一张）不属于这套，位置不变。
 
 > 注意：`styles.css` 顶部有 `* { transition: none }` 的全站重置，想给某个元素加过渡**必须写 `transition` 简写**，只写 `transition-duration` 是没有效果的。
 
@@ -178,6 +181,7 @@ python -m http.server 8125 --bind 127.0.0.1
 - 任务列表要走 `GET /projects/{id}/tasks`，返回 `TaskListItem`：在 `TaskRead` 基础上多了 `image_total` / `image_annotated`，列表才能直接显示「已标注 3 / 12」而不用逐条拉详情。
 - 看图页「在标注台打开」靠 `GET /projects/{id}/images/{image_id}/tasks`：一张图可以同时属于多个任务，所以要问后端这张图落在哪个任务、对应哪条 `task_image`、以及能不能改；没有任何可编辑任务时按钮保持隐藏。
 - 空间级功能（小组成员与图库、企业审核/公告/日报）在右上角「空间设置」抽屉里，直接复用 team.js / enterprise.js 的原有 DOM。
+- 空间 header 只留「切换器 + 新建项目」，低频动作（空间设置、创建企业）收在右侧「⋯」圆按钮里（`.space-menu` / `.space-menu-trigger` / `.space-menu-list`）：一次只开一个，点菜单项 / 点外面 / 按 Esc 都收起；菜单项仍保留原 id（`#teamSpaceSettings` / `#enterpriseSpaceSettings` / `#newEnterpriseButton`），所以各自的监听器不用改。企业徽标（`#brandEnterprise`）只说明「你在哪个企业里」，只在企业空间与企业项目页出现，个人 / 小组 / 平台管理页一律收掉。
 - 「识别方案」对话框同时管两件事：把填写的目标同步成项目类目（新增 / 修改 / 删除），以及置信度阈值 `box_threshold`（滑块 0.05–0.95，默认 0.30，`PATCH /projects/{id}/auto-config`）。上传后分析走的 `syncAnalysisConfig()` **不传**阈值，避免上传动作悄悄改掉老项目的设置；只有在这个对话框里按「保存识别方案」才会写。
 - 目标是一条一条编辑的（`#targetRows` 里每行 `中文名 | 英文提示词 | ×`）：中文名只用于界面显示，英文提示词才是喂给模型的检测口径，留空则保存时由后端按中文名自动翻译（`create_category` / `update_category` 里 `en_name` 传空串即触发翻译）。保存时按行比对——没有 `id` 的新建，改过的 PATCH，从列表里删掉的 DELETE；中文名重复在提交前就拦下。
 - 阈值的作用点在推理之后：一次推理用所有类目里最小的那个阈值取框，再按每个类目的 `threshold_override` / 全局值过滤，最后做跨类目去重（IoU ≥ 0.8，同类目 IoU ≥ 0.6）。所以调高阈值只会少框，不会变快。
@@ -188,3 +192,8 @@ python -m http.server 8125 --bind 127.0.0.1
 - 「移除所选」只删 `ProjectImage` 关联（`DELETE /projects/{id}/images/{image_id}`），图片仍在小组图库里，可以再添加回来。
 - 新建任务对话框：可以只勾「只选未标注」（`stage` 为 `none` / `pending` 的图），并可选「需要审核」。不要求审核时后端在任务标完（自动或人工点「完成标注」）后走 `review_crud.auto_approve()` 直接置为 `approved`，不发给评审人；这个字段存在 `Task.review_required`（默认 `true`），老库由 `app/migrations.py` 的 `ensure_columns()` 补列。
 - 项目描述不进顶栏：顶栏只放栏目名 / 项目名，描述在「设置」里改名时一起编辑。
+- 任务列表里状态为「待复核」的那一行：状态标签变成按钮（`.task-chip.is-action`，点它直接开复核工作台），后面跟一枚进度 `复核 3 / 4 张`（有驳回时再加 ` · 退回 1`），右边还有「复核」按钮。这两个计数来自 `TaskListItem.review_approved` / `review_rejected`，由 `task_image_crud.review_progress_by_task()` 一次 GROUP BY 算出。
+- 逐图复核会自己收口：`POST .../images/{ti}/review` 在写完之后调 `review_crud.finalize_approved()` —— 只要任务是 `auto_annotated`、每张图都 `annotated` 且 `approved`，就补一条 approve 记录并把任务推到 `approved`（通知提交者与被指派人）。所以「在图像里审完、任务列表还挂着待复核」不会再出现；只要有一张被驳回就仍然留给人工做 `reject_fix` / `reject_reannotate`。
+- 行内小按钮的语义色是全站统一的：无修饰 = 中性（提交、翻页、重置密码），`is-accent` = 打开或进入某个工作台（标注），`is-pass` = 通过 / 批准 / 接受（复核、通过、接受邀请，绿），`is-reject` = 破坏性或退回（取消任务、移除、删除、驳回，红）。加了新按钮先想清楚属于哪一类，不要随手挑颜色。
+- 任务进度条（`.task-progress` / `.task-progress-fill`）高 5px（经典 4px）、轨道 `#e2e2e9`（晴蓝 `--sky-outline-soft`），4px 的浅灰轨道在截图和低对比屏上几乎看不见；满进度时填充转绿。
+- 标注台与复核台的快捷键提示（`.annotate-hint`）挂在画布下方（`.annotate-stage-wrap`），不再塞在右栏最底部——那里行一长就滚出视野。

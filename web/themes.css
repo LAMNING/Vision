@@ -1075,6 +1075,15 @@ html[data-theme="clear-sky"] .task-chip {
   background: var(--sky-surface-mid);
   color: var(--sky-text);
 }
+html[data-theme="clear-sky"] .task-chip.is-action {
+  border-color: var(--sky-primary);
+  background: var(--sky-primary-container);
+  color: var(--sky-on-primary-container);
+}
+html[data-theme="clear-sky"] .task-chip.is-action:hover {
+  background: var(--sky-surface-high);
+}
+html[data-theme="clear-sky"] .task-review-count { color: var(--sky-primary); }
 html[data-theme="clear-sky"] .task-progress { background: var(--sky-surface-high); }
 html[data-theme="clear-sky"] .task-progress-fill { background: var(--sky-primary); }
 html[data-theme="clear-sky"] .task-progress-fill.is-full { background: #188038; }
@@ -1117,6 +1126,7 @@ html[data-theme="clear-sky"] .task-pick-empty { color: var(--sky-muted); }
 /* 缁忓吀锛氬悓涓€濂楅厤鑹诧紝鍙敹绱т竴妗ｅ昂瀵?*/
 html[data-vision-theme="classic"] .task-filter { height: 32px; border-radius: 9px; font-size: 11px; }
 html[data-vision-theme="classic"] .task-chip { padding: 0 8px; font-size: 9.5px; }
+html[data-vision-theme="classic"] .task-chip.is-action { font-size: 9.5px; }
 html[data-vision-theme="classic"] .task-progress { height: 3px; }
 html[data-vision-theme="classic"] .task-mode { padding: 9px 10px !important; }
 html[data-vision-theme="classic"] .task-pick-list { max-height: 188px; }
@@ -1349,3 +1359,41 @@ html[data-vision-theme="classic"] .image-review-dialog { width: min(680px, calc(
 html[data-vision-theme="classic"] .review-stage { border-radius: 10px; }
 html[data-vision-theme="classic"] .review-box-list { max-height: 128px; }
 html[data-vision-theme="classic"] .review-reason textarea { min-height: 60px; font-size: 12px; }
+/* ---- 任务复核工作台（复核层复用标注台骨架） ---- */
+html[data-theme="clear-sky"] .review-verdict-note { color: var(--sky-muted); }
+html[data-theme="clear-sky"] .review-verdict-name { color: var(--sky-text); }
+html[data-theme="clear-sky"] .review-verdict-reason { border-left-color: var(--sky-error-container); color: var(--sky-danger); }
+html[data-theme="clear-sky"] .review-reason-input { border-color: var(--sky-outline-soft); border-radius: 12px; background: var(--sky-surface); color: var(--sky-text); }
+html[data-theme="clear-sky"] .review-reason-input:focus { border-color: var(--sky-primary); outline-color: var(--sky-primary-container); }
+html[data-theme="clear-sky"] .review-reason-input:disabled { background: var(--sky-surface-low); color: var(--sky-muted); }
+html[data-theme="clear-sky"] .review-view .annotate-rail-item .review-rail-tag { border-radius: 6px; }
+html[data-theme="clear-sky"] .review-task-actions { border-top-color: var(--sky-outline-soft); }
+html[data-theme="clear-sky"] .review-task-actions .mini-button { border-radius: 10px; }
+
+html[data-vision-theme="classic"] .review-reason-input { min-height: 58px; border-radius: 9px; font-size: 11.5px; }
+html[data-vision-theme="classic"] .review-task-actions .mini-button { height: 26px; font-size: 10.5px; }
+html[data-vision-theme="classic"] .review-view .annotate-rail-item .review-rail-tag { font-size: 8.5px; line-height: 14px; }
+/* ---------------- 空间 header 的「更多」菜单（样式定义在 styles.css） ---------------- */
+html[data-theme="clear-sky"] .space-menu-trigger {
+  border-color: var(--sky-outline);
+  background: var(--sky-surface);
+  color: var(--sky-muted);
+}
+html[data-theme="clear-sky"] .space-menu-trigger:hover { border-color: var(--sky-muted); background: var(--sky-surface-low); color: var(--sky-text); }
+html[data-theme="clear-sky"] .space-menu-trigger[aria-expanded="true"] { border-color: var(--sky-primary); background: var(--sky-primary-container); color: var(--sky-on-primary-container); }
+html[data-theme="clear-sky"] .space-menu-list {
+  border-color: var(--sky-outline-soft);
+  border-radius: 16px;
+  background: var(--sky-surface);
+  box-shadow: 0 26px 52px -20px rgba(32, 33, 36, .34), 0 2px 6px rgba(32, 33, 36, .08);
+}
+html[data-theme="clear-sky"] .space-menu-item { color: var(--sky-text); }
+html[data-theme="clear-sky"] .space-menu-item:hover { background: var(--sky-primary-container); color: var(--sky-on-primary-container); }
+html[data-theme="clear-sky"] .task-progress { background: var(--sky-outline-soft); box-shadow: inset 0 0 0 1px rgba(32, 33, 36, .06); }
+
+html[data-vision-theme="classic"] .space-menu-trigger { width: 32px; height: 32px; }
+html[data-vision-theme="classic"] .space-menu-trigger .material-symbols-rounded { font-size: 18px; }
+html[data-vision-theme="classic"] .space-menu-list { min-width: 140px; border-radius: 12px; padding: 5px; }
+html[data-vision-theme="classic"] .space-menu-item { padding: 7px 9px; font-size: 11.5px; }
+html[data-vision-theme="classic"] .annotate-stage-wrap .annotate-hint { margin-top: 8px; font-size: 9.5px; }
+html[data-vision-theme="classic"] .task-progress { height: 4px; }

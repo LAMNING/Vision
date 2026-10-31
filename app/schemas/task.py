@@ -94,14 +94,17 @@ class TaskRead(ORMModel):
 
 
 class TaskListItem(TaskRead):
-    '''任务列表项：额外带图片总数与已标注数。
+    '''任务列表项：额外带图片总数、已标注数与逐图复核计数。
 
     列表里要显示「已标注 5 / 12」这种进度，但每次打开列表都去拉详情太重，
-    所以在列表响应里直接把两个计数带上（由路由层一次聚合查询算出）。
+    所以在列表响应里直接把计数带上（由路由层一次聚合查询算出）。
+    「待复核」的任务还要显示「复核 2 / 4 张」，所以再带两个逐图复核计数。
     '''
 
     image_total: int = 0
     image_annotated: int = 0
+    review_approved: int = 0
+    review_rejected: int = 0
 
 
 class TaskDetailRead(TaskRead):

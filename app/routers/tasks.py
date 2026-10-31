@@ -123,12 +123,21 @@ def list_project_tasks(
         assignee_account_id=assignee_account_id,
     )
     progress = task_image_crud.progress_by_task(db, [task.id for task in tasks])
+    reviewed = task_image_crud.review_progress_by_task(
+        db, [task.id for task in tasks]
+    )
     items: list[TaskListItem] = []
     for task in tasks:
         total, done = progress.get(task.id, (0, 0))
+        approved, rejected = reviewed.get(task.id, (0, 0))
         items.append(
             TaskListItem.model_validate(task).model_copy(
-                update={'image_total': total, 'image_annotated': done}
+                update={
+                    'image_total': total,
+                    'image_annotated': done,
+                    'review_approved': approved,
+                    'review_rejected': rejected,
+                }
             )
         )
     return items
@@ -361,8 +370,20 @@ def review_task_image(
             'task_id': task.id,
         },
     )
+    # 逐图都通过就顺手收口：图像里已经审完，任务不该还挂在「待复核」。
+    # 只要还有一张没通过（未审核 / 已退回 / 未标注），这里就返回 None，等人工裁决。
+    finished = review_crud.finalize_approved(
+        db,
+        task,
+        actor_account_id=account.id,
+        comment='逐图复核全部通过',
+        commit=False,
+    )
+
     db.commit()
     db.refresh(row)
+    if finished is not None:
+        review_crud.notify_outcome(db, task, 'approve')
     return TaskImageRead.model_validate(row)
 
 

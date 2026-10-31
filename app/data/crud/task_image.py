@@ -23,6 +23,24 @@ def progress_by_task(db: Session, task_ids: list[int]) -> dict[int, tuple[int, i
     return {int(task_id): (int(total or 0), int(done or 0)) for task_id, total, done in rows}
 
 
+def review_progress_by_task(db: Session, task_ids: list[int]) -> dict[int, tuple[int, int]]:
+    '''一次聚合出「逐图复核」的两个计数：{task_id: (approved, rejected)}。
+
+    任务列表里「待复核」那一行要能显示「复核 2 / 4 张」，审核员才知道还剩几张没看；
+    否则任务卡在待复核时界面上看不出任何进展。
+    '''
+    if not task_ids:
+        return {}
+    approved = func.sum(case((TaskImage.review_status == 'approved', 1), else_=0))
+    rejected = func.sum(case((TaskImage.review_status == 'rejected', 1), else_=0))
+    rows = db.execute(
+        select(TaskImage.task_id, approved, rejected)
+        .where(TaskImage.task_id.in_(task_ids))
+        .group_by(TaskImage.task_id)
+    ).all()
+    return {int(task_id): (int(ok or 0), int(bad or 0)) for task_id, ok, bad in rows}
+
+
 def list_task_images(db: Session, task_id: int) -> list[TaskImage]:
     stmt = (
         select(TaskImage)
