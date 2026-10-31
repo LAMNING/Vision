@@ -348,6 +348,7 @@
             </div>
 
             <section class="project-pane" data-project-pane="overview">
+              <p class="project-desc" id="projectDesc" hidden></p>
               <div class="project-next" id="projectNext" hidden></div>
               <div class="admin-stats project-stats" id="projectStats"></div>
               <article class="panel admin-panel">
@@ -368,7 +369,7 @@
                   <div class="panel-head-actions">
                     <select id="projectTaskFilter" class="task-filter" aria-label="按状态筛选任务">
                       <option value="">全部状态</option>
-                      <option value="queued">待标注</option>
+                      <option value="queued">排队中 / 待标注</option>
                       <option value="auto_annotating">标注中</option>
                       <option value="auto_annotated">待复核</option>
                       <option value="rejected_fix">退回修改</option>
@@ -378,6 +379,7 @@
                       <option value="approved">已通过</option>
                       <option value="cancelled">已取消</option>
                     </select>
+                    <button class="task-mine-toggle" id="projectTaskMine" type="button" aria-pressed="false" title="只看指派给我的任务">只看我的</button>
                     <button class="secondary-button" id="projectNewTask" type="button">新建任务</button>
                   </div>
                 </div>
@@ -1175,6 +1177,20 @@
             <input type="checkbox" id="taskReviewRequired" checked />
             <span><strong>需要审核</strong><small>标完进复核队列；取消勾选则标注完成后直接通过。</small></span>
           </label>
+          <div class="task-assign" id="taskAssigneeRow">
+            <label for="taskCreateAssignee">指派标注员 <span class="optional">可选</span></label>
+            <select id="taskCreateAssignee">
+              <option value="">不指定 —— 谁有空谁标</option>
+            </select>
+            <p class="settings-help">指派后任务会进对方的「待标注」，只在人工任务生效。</p>
+          </div>
+          <div class="task-assign" id="taskReviewerRow">
+            <label for="taskCreateReviewer">复核人 <span class="optional">可选</span></label>
+            <select id="taskCreateReviewer">
+              <option value="">按项目默认</option>
+            </select>
+            <p class="settings-help">只有勾了「需要审核」才用得上。</p>
+          </div>
           <p class="task-create-hint" id="taskCreateHint" hidden></p>
           <div class="settings-actions">
             <p class="settings-status" id="taskCreateStatus" role="status"></p>

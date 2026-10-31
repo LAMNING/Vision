@@ -127,6 +127,9 @@ class ImageTaskRef(ORMModel):
     task_image_id: int
     annotation_status: str
     review_status: str
+    # 看图页的「在标注台打开 / 审核这张」直接看这两个布尔，不让前端自己拼权限
+    can_annotate: bool = False
+    can_review: bool = False
 
 
 class MyTaskRead(TaskRead):

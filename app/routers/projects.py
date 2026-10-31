@@ -16,6 +16,8 @@ from app.data.crud.group import get_group
 from app.data.crud.project import list_viewable_projects
 from app.data.crud.project_access import (
     ProjectAccess,
+    can_decide_task,
+    can_edit_task,
     require_group_manage,
     require_manage,
     require_upload,
@@ -523,6 +525,15 @@ def list_project_images(
     items: list[ProjectImageRead] = []
     for row in rows:
         info = progress.get(int(row.id)) or {}
+        # 「标注」按钮要同时满足：这张图所在任务可编辑 + 我确实有权改它。
+        # 权限口径抄 tasks.py 的 _can_edit_annotations（manager / 提交人 / 被指派人 / annotator），
+        # 少这一层只读成员会看到按钮、点下去被 403 挡回来。
+        may_annotate = bool(info.get('can_annotate')) and can_edit_task(
+            access,
+            account.id,
+            submitter_id=info.get('task_submitter_id'),
+            assignee_id=info.get('task_assignee_id'),
+        )
         items.append(
             ProjectImageRead.model_validate(row).model_copy(
                 update={
@@ -534,7 +545,7 @@ def list_project_images(
                     'task_name': info.get('task_name'),
                     'task_mode': info.get('task_mode'),
                     'task_image_id': info.get('task_image_id'),
-                    'can_annotate': bool(info.get('can_annotate')),
+                    'can_annotate': may_annotate,
                     'can_review': bool(info.get('can_review')) and access.can_review,
                 }
             )
@@ -729,7 +740,7 @@ def list_image_tasks(
     看图页要提供「在标注台打开」，但图片本身并不知道自己属于哪个任务
     （一张图可以同时进多个任务），所以由这里一次查出来，前端不用猜。
     '''
-    _accessible(db, account, project_id)
+    access = require_view(db, account, project_id)
 
     rows = db.execute(
         select(TaskImage, Task)
@@ -742,18 +753,40 @@ def list_image_tasks(
         .order_by(Task.id.desc())
     ).all()
 
-    return [
-        ImageTaskRef(
-            task_id=task.id,
-            task_name=task.name,
-            task_status=task.status,
-            task_mode=task.mode,
-            task_image_id=row.id,
-            annotation_status=row.annotation_status,
-            review_status=row.review_status,
+    refs: list[ImageTaskRef] = []
+    for row, task in rows:
+        # 能不能改 / 能不能裁决都算在服务端：看图页只按这两个布尔显不显示按钮，
+        # 否则只读成员点进标注台、画完框才被 403 挡回来。
+        editable = task.status in ('rejected_fix', 'rejected_reannotate') or (
+            task.status == 'queued' and task.mode == 'manual'
         )
-        for row, task in rows
-    ]
+        reviewable = (
+            task.status == 'auto_annotated'
+            and row.annotation_status == 'annotated'
+        )
+        refs.append(
+            ImageTaskRef(
+                task_id=task.id,
+                task_name=task.name,
+                task_status=task.status,
+                task_mode=task.mode,
+                task_image_id=row.id,
+                annotation_status=row.annotation_status,
+                review_status=row.review_status,
+                can_annotate=editable
+                and can_edit_task(
+                    access,
+                    account.id,
+                    submitter_id=task.submitter_account_id,
+                    assignee_id=task.assignee_account_id,
+                ),
+                can_review=reviewable
+                and can_decide_task(
+                    access, account.id, reviewer_id=task.reviewer_account_id
+                ),
+            )
+        )
+    return refs
 
 
 # ---- 标注导出 ----

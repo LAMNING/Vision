@@ -29,6 +29,8 @@
   let createTarget = null;       // { kind, groupId }
   let viewer = null;             // 当前账号，用来判断「标注」入口要不要露出来
   let taskFilter = "";           // 任务列表的状态筛选，空串 = 全部
+  let taskMine = false;          // 「只看我的」：交给后端 assigned_to_me 过滤，跨分页也准
+  let memberRows = null;         // 项目成员原始行，新建任务时用来填「指派 / 复核人」
   let memberMap = null;          // 成员 id → 显示名，供任务行显示负责人
   let taskPickImages = [];       // 新建任务对话框里的图片清单
   let taskCreateBlocked = false; // 没有启用类目时拦住「创建任务」
@@ -195,14 +197,22 @@
     loaded.overview = loaded.tasks = loaded.members = loaded.categories = loaded.settings = false;
     // 换项目要重置列表态，否则会带着上个项目的筛选与成员缓存
     taskFilter = "";
+    taskMine = false;
     memberMap = null;
+    memberRows = null;
     taskPickImages = [];
     if ($("#projectTaskFilter")) $("#projectTaskFilter").value = "";
+    syncMineToggle();
 
     // 标题区已经挪到顶栏（#appContextTitle / #appContextKicker）
-    // 项目描述按需求从顶栏撤掉了，只留在「设置」里编辑
+    // 项目描述按需求从顶栏撤掉了，改在「概览」第一行与「设置」里显示 / 编辑
     $("#appContextTitle").textContent = project.name;
     $("#appContextKicker").textContent = `${SPACE_LABEL[labelOf(project)]} · ${groupLabel(project)}`;
+    const desc = $("#projectDesc");
+    if (desc) {
+      desc.textContent = project.description || "";
+      desc.hidden = !project.description;
+    }
     $("#projectRole").textContent = ROLE_LABEL[project.role] || project.role || "";
     $("#projectRole").hidden = false;
     $("#projectArchive").hidden = !project.can_manage || project.status !== "active";
@@ -356,6 +366,7 @@
     memberMap = new Map();
     try {
       const rows = await call(() => sdk.listProjectMembers(current.id));
+      memberRows = rows;
       rows.forEach((member) => {
         const account = member.account || {};
         memberMap.set(member.account_id, displayName(account) || `#${member.account_id}`);
@@ -366,15 +377,24 @@
     return memberMap;
   }
 
+  /** 「只看我的」按钮的按下态：后端的 assigned_to_me 才是真过滤，这里只反映状态。 */
+  function syncMineToggle() {
+    const node = $("#projectTaskMine");
+    if (!node) return;
+    node.classList.toggle("is-on", taskMine);
+    node.setAttribute("aria-pressed", taskMine ? "true" : "false");
+  }
+
   async function loadTasks() {
+    syncMineToggle();
     const [tasks, mine] = await Promise.all([
-      call(() => sdk.listProjectTasks(current.id)),
+      call(() => sdk.listProjectTasks(current.id, taskMine ? { assignedToMe: true } : {})),
       viewerOf(),
     ]);
     const names = await memberNames();
     const visible = taskFilter ? tasks.filter((task) => task.status === taskFilter) : tasks;
     // 工具行左边只放计数，像 GitHub 仓库页的「1 Branch · 0 Tags」那样一口气说完状态
-    const metaBits = [`共 ${tasks.length} 个任务`];
+    const metaBits = [taskMine ? `我的 ${tasks.length} 个任务` : `共 ${tasks.length} 个任务`];
     if (taskFilter) metaBits.push(`筛出 ${visible.length} 个`);
     const waitingAnnotate = visible.filter((task) => task.status === "queued").length;
     const waitingReview = visible.filter((task) => task.status === "auto_annotated").length;
@@ -384,7 +404,15 @@
     const box = $("#projectTaskList");
     box.replaceChildren();
     if (!tasks.length) {
-      box.append(el("div", "empty-state project-empty", "还没有任务。点右上角「新建任务」，选好图片和标注方式就能开始。"));
+      box.append(
+        el(
+          "div",
+          "empty-state project-empty",
+          taskMine
+            ? "没有指派给你的任务。点「只看我的」旁边的按钮可以看全部任务。"
+            : "还没有任务。点右上角「新建任务」，选好图片和标注方式就能开始。"
+        )
+      );
       return;
     }
     if (!visible.length) {
@@ -556,6 +584,8 @@
   async function openTaskCreate() {
     if (!current) return;
     $("#taskCreateName").value = "";
+    if ($("#taskCreateAssignee")) $("#taskCreateAssignee").value = "";
+    if ($("#taskCreateReviewer")) $("#taskCreateReviewer").value = "";
     $("#taskCreateSubmit").disabled = false;
     status("#taskCreateStatus", "");
     taskPickImages = [];
@@ -565,7 +595,13 @@
     openDialog($("#taskCreateDialog"));
     window.setTimeout(() => $("#taskCreateName").focus(), 120);
     // 没有启用类目时提交会被后端挡回来（"项目还没有启用的类目"），先在这里说清楚
-    const categories = await call(() => sdk.listCategories(current.id)).catch(() => []);
+    const [categories, members] = await Promise.all([
+      call(() => sdk.listCategories(current.id)).catch(() => []),
+      call(() => sdk.listProjectMembers(current.id)).catch(() => []),
+    ]);
+    memberRows = members;
+    fillTaskAssignees(members);
+    syncTaskAssignMode();
     taskCreateBlocked = !categories.filter((category) => category.enabled !== false).length;
     const hint = $("#taskCreateHint");
     if (hint) {
@@ -645,6 +681,48 @@
     return node ? node.value : "auto";
   }
 
+  /**
+   * 「指派标注员 / 复核人」：后端建任务就吃 assignee_account_id 与 reviewer_account_id，
+   * 但界面一直没给选择器，团队里的人工任务只能谁有空谁去翻列表。
+   * 候选按角色过滤 —— 与 tasks.py 的 _can_edit_annotations / _require_reviewable 对齐。
+   */
+  function fillTaskAssignees(rows) {
+    const assignee = $("#taskCreateAssignee");
+    const reviewer = $("#taskCreateReviewer");
+    const memberLabel = (member) => {
+      const account = member.account || {};
+      const roles = (member.roles || []).map((role) => ROLE_LABEL[role] || role).join(" / ");
+      return `${displayName(account) || `#${member.account_id}`}${roles ? ` · ${roles}` : ""}`;
+    };
+    const hasRole = (member, wanted) => (member.roles || []).some((role) => wanted.includes(role));
+    if (assignee) {
+      assignee.replaceChildren(new Option("不指定 —— 谁有空谁标", ""));
+      rows
+        .filter((member) => hasRole(member, ["annotator", "manager"]))
+        .forEach((member) => assignee.append(new Option(memberLabel(member), String(member.account_id))));
+    }
+    if (reviewer) {
+      reviewer.replaceChildren(new Option("按项目默认", ""));
+      rows
+        .filter((member) => hasRole(member, ["reviewer", "manager"]))
+        .forEach((member) => reviewer.append(new Option(memberLabel(member), String(member.account_id))));
+    }
+  }
+
+  /** 指派只对人工任务有意义，复核人只在勾了「需要审核」时用得上 —— 灰掉而不是藏着。 */
+  function syncTaskAssignMode() {
+    const manual = chosenMode() === "manual";
+    const needReview = $("#taskReviewRequired") ? $("#taskReviewRequired").checked : true;
+    const assigneeRow = $("#taskAssigneeRow");
+    const assignee = $("#taskCreateAssignee");
+    const reviewerRow = $("#taskReviewerRow");
+    const reviewer = $("#taskCreateReviewer");
+    if (assigneeRow) assigneeRow.dataset.disabled = manual ? "" : "1";
+    if (assignee) assignee.disabled = !manual;
+    if (reviewerRow) reviewerRow.dataset.disabled = needReview ? "" : "1";
+    if (reviewer) reviewer.disabled = !needReview;
+  }
+
   async function submitTaskCreate() {
     const imageIds = pickedImageIds();
     if (!imageIds.length) {
@@ -655,6 +733,10 @@
     const kind = mode === "manual" ? "人工标注" : "自动标注";
     const reviewNode = $("#taskReviewRequired");
     const reviewRequired = reviewNode ? reviewNode.checked : true;
+    const assigneeNode = $("#taskCreateAssignee");
+    const reviewerNode = $("#taskCreateReviewer");
+    const assigneeId = mode === "manual" && assigneeNode ? assigneeNode.value : "";
+    const reviewerId = reviewRequired && reviewerNode ? reviewerNode.value : "";
     const button = $("#taskCreateSubmit");
     button.disabled = true;
     status("#taskCreateStatus", "正在创建…");
@@ -664,12 +746,17 @@
         imageIds,
         mode,
         reviewRequired,
+        assigneeAccountId: assigneeId ? Number(assigneeId) : undefined,
+        reviewerAccountId: reviewerId ? Number(reviewerId) : undefined,
       }));
       // 建出来还是 draft，这里顺手提交，省掉「建完再去列表里点提交」这一步。
       const task = await call(() => sdk.submitTask(current.id, created.id));
       closeDialog($("#taskCreateDialog"));
       const tail = reviewRequired ? "，标完进复核队列" : "，标完直接通过";
-      status("#projectTaskStatus", `已提交${kind}任务「${task.name || `任务 #${task.id}`}」，共 ${imageIds.length} 张图片${tail}`);
+      const assigned = task.assignee_account_id
+        ? `，已指派给 ${(await memberNames()).get(task.assignee_account_id) || `#${task.assignee_account_id}`}`
+        : "";
+      status("#projectTaskStatus", `已提交${kind}任务「${task.name || `任务 #${task.id}`}」，共 ${imageIds.length} 张图片${tail}${assigned}`);
       loaded.overview = false;
       await loadTasks();
     } catch (error) {
@@ -807,7 +894,11 @@
       }));
       current = { ...current, ...updated };
       $("#appContextTitle").textContent = current.name;
-      $("#projectDesc").textContent = current.description || "暂无描述";
+      const desc = $("#projectDesc");
+      if (desc) {
+        desc.textContent = current.description || "";
+        desc.hidden = !current.description;
+      }
       status("#projectSettingsStatus", "已保存");
       loaded.overview = false;
     });
@@ -987,6 +1078,15 @@
     taskFilter = $("#projectTaskFilter").value;
     loadTasks().catch((error) => status("#projectTaskStatus", error.message, true));
   });
+  $("#projectTaskMine").addEventListener("click", () => {
+    taskMine = !taskMine;
+    syncMineToggle();
+    loadTasks().catch((error) => status("#projectTaskStatus", error.message, true));
+  });
+  document.querySelectorAll('input[name="taskCreateMode"]').forEach((node) => {
+    node.addEventListener("change", syncTaskAssignMode);
+  });
+  $("#taskReviewRequired")?.addEventListener("change", syncTaskAssignMode);
   $("#projectAddMember").addEventListener("click", addMember);
   $("#projectSettingsForm").addEventListener("submit", saveSettings);
   $("#projectCategoryAdd").addEventListener("click", addCategory);

@@ -68,6 +68,18 @@ class ProjectAccess:
         return any(role in ('manager', 'reviewer') for role in self.roles)
 
     @property
+    def can_annotate(self) -> bool:
+        '''在标注工作台里画 / 改标注：能管项目的，或项目里的 annotator。
+
+        与 ``app/routers/tasks.py`` 的 ``_can_edit_annotations`` 对齐——那一层还
+        额外放行任务提交人与被指派人，所以这里只是「角色口径」；逐任务的提交人 /
+        被指派人由图列表再叠一层（见 ``list_project_images``）。
+        '''
+        if self.can_manage:
+            return True
+        return any(role in ('manager', 'annotator') for role in self.roles)
+
+    @property
     def label(self) -> str:
         '''给前端展示的「我在这个项目里是谁」。'''
         if self.is_personal_owner:
@@ -117,6 +129,41 @@ def resolve_project_access(
         is_personal_owner=is_personal_owner,
         enterprise_role=enterprise_role,
     )
+
+
+def can_edit_task(
+    access: ProjectAccess,
+    account_id: int,
+    *,
+    submitter_id: int | None = None,
+    assignee_id: int | None = None,
+) -> bool:
+    '''能不能在标注工作台里改某个任务的标注。
+
+    口径与 ``app/routers/tasks.py`` 的 ``_can_edit_annotations`` 完全一致：能管项目的、
+    任务提交人、任务被指派人，或项目里的 annotator。调用方只要手里有这几个 id 就行
+    （「图像」列表是逐图聚合出来的，只有 id，没有 Task 实例）。
+    '''
+    if access.can_manage:
+        return True
+    if account_id in (submitter_id, assignee_id):
+        return True
+    return 'annotator' in access.roles
+
+
+def can_decide_task(
+    access: ProjectAccess, account_id: int, *, reviewer_id: int | None = None
+) -> bool:
+    '''能不能裁决某个待复核任务。
+
+    与 ``review_crud.require_reviewer_allowed`` 对齐：先看角色（reviewer/manager），
+    指派了具体复核人的任务只有本人或项目管理者能裁决。
+    '''
+    if not access.can_review:
+        return False
+    if reviewer_id is None:
+        return True
+    return reviewer_id == account_id or access.can_manage
 
 
 def require_view(db: Session, account: Account, project_id: int) -> ProjectAccess:

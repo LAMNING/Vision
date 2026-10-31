@@ -1505,6 +1505,25 @@ body.is-drawer-open { overflow: hidden; }
 .task-review-toggle strong { color: #171719; font-size: 12px; font-weight: 600; }
 .task-review-toggle small { color: #8e8e93; font-size: 10.5px; line-height: 1.5; }
 
+/* 指派标注员 / 复核人：只在对应条件下可用，灰掉而不是藏起来（藏起来用户不知道有这功能） */
+.task-assign { display: grid; gap: 6px; margin-top: 12px; }
+.task-assign[data-disabled="1"] { opacity: .55; }
+.task-assign label { margin: 0; color: #4d4d52; font-size: 11.5px; font-weight: 600; }
+.task-assign select { height: 34px; border: 1px solid rgba(0, 0, 0, .1); border-radius: 10px; background: #fff; padding: 0 10px; color: #1f1f1f; font: inherit; font-size: 12px; cursor: pointer; }
+.task-assign select:disabled { cursor: not-allowed; }
+.task-assign select:focus-visible { outline: 2px solid rgba(0, 113, 227, .35); outline-offset: 1px; }
+.task-assign .settings-help { margin: 0; }
+
+/* 「只看我的」开关：和状态筛选并排，按下态用主色的浅底 */
+.task-mine-toggle { height: 34px; border: 1px solid rgba(0, 0, 0, .08); border-radius: 999px; background: rgba(255, 255, 255, .74); padding: 0 13px; color: #4d4d52; font: inherit; font-size: 11.5px; cursor: pointer; transition: border-color 160ms ease, background 160ms ease, color 160ms ease; }
+.task-mine-toggle:hover { border-color: #bcd8f8; color: #0059b8; }
+.task-mine-toggle.is-on { border-color: #bcd8f8; background: #f2f8ff; color: #0059b8; font-weight: 600; }
+.task-mine-toggle:focus-visible { outline: 2px solid rgba(0, 113, 227, .35); outline-offset: 2px; }
+
+/* 概览第一行的项目描述：顶栏撤掉之后总得有个地方能看到 */
+.project-desc { margin: 0 0 14px; color: #6e6e73; font-size: 12px; line-height: 1.65; }
+.project-desc[hidden] { display: none; }
+
 /* ---- 逐图复核弹窗（澄白 / 基础层） ---- */
 .image-review-dialog { width: min(760px, calc(100vw - 48px)); }
 .review-stage { position: relative; display: grid; margin-top: 12px; border: 1px solid #e6e6eb; border-radius: 12px; background: #f2f2f7; overflow: hidden; }

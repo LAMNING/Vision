@@ -1397,3 +1397,28 @@ html[data-vision-theme="classic"] .space-menu-list { min-width: 140px; border-ra
 html[data-vision-theme="classic"] .space-menu-item { padding: 7px 9px; font-size: 11.5px; }
 html[data-vision-theme="classic"] .annotate-stage-wrap .annotate-hint { margin-top: 8px; font-size: 9.5px; }
 html[data-vision-theme="classic"] .task-progress { height: 4px; }
+
+/* 「只看我的」/ 指派选择器 / 概览项目描述：晴蓝与经典共用 Google 基线 */
+html[data-theme="clear-sky"] .task-mine-toggle {
+  border-color: var(--sky-outline);
+  background: var(--sky-surface);
+  color: var(--sky-muted);
+  border-radius: 10px;
+}
+html[data-theme="clear-sky"] .task-mine-toggle:hover { border-color: var(--sky-muted); background: var(--sky-surface-low); color: var(--sky-text); }
+html[data-theme="clear-sky"] .task-mine-toggle.is-on { border-color: var(--sky-primary); background: var(--sky-primary-container); color: var(--sky-on-primary-container); }
+html[data-theme="clear-sky"] .task-assign label { color: var(--sky-muted); }
+html[data-theme="clear-sky"] .task-assign select {
+  border-color: var(--sky-outline);
+  border-radius: 10px;
+  background: var(--sky-surface);
+  color: var(--sky-text);
+}
+html[data-theme="clear-sky"] .task-assign select:focus-visible { outline-color: var(--sky-primary); }
+html[data-theme="clear-sky"] .project-desc { color: var(--sky-muted); }
+
+html[data-vision-theme="classic"] .task-mine-toggle { height: 32px; border-radius: 9px; padding: 0 11px; font-size: 11px; }
+html[data-vision-theme="classic"] .task-assign { margin-top: 10px; gap: 5px; }
+html[data-vision-theme="classic"] .task-assign label { font-size: 11px; }
+html[data-vision-theme="classic"] .task-assign select { height: 32px; border-radius: 9px; font-size: 11.5px; }
+html[data-vision-theme="classic"] .project-desc { margin-bottom: 11px; font-size: 11.5px; }

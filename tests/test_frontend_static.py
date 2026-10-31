@@ -206,9 +206,24 @@ def test_create_task_dialog_controls(page):
     ids = set(page.ids)
     for element_id in ('taskCreateDialog', 'taskCreateName', 'taskPickList', 'taskPickAll',
                        'taskPickNone', 'taskPickUnannotated', 'taskReviewRequired',
+                       'taskCreateAssignee', 'taskCreateReviewer',
+                       'taskAssigneeRow', 'taskReviewerRow',
                        'taskCreateSubmit', 'taskCreateHint'):
         assert element_id in ids, element_id
     assert 'name="taskCreateMode"' in HTML
+
+
+def test_task_toolbar_exposes_mine_filter_and_description(page):
+    """任务工具行的「只看我的」走后端过滤；项目描述改在概览第一行，不再依赖已删的顶栏元素。"""
+    ids = set(page.ids)
+    assert 'projectTaskMine' in ids
+    assert 'projectDesc' in ids
+    projects = (WEB / 'projects.js').read_text(encoding='utf-8')
+    assert 'assignedToMe: true' in projects
+    assert 'assigneeAccountId' in projects
+    assert 'reviewerAccountId' in projects
+    # 概览里的描述元素必须真的被渲染，否则又是「写了不存在的 id」
+    assert 'project-desc' in (WEB / 'styles.css').read_text(encoding='utf-8')
 
 
 def test_task_row_offer_annotate_and_review_paths():
@@ -221,14 +236,16 @@ def test_task_row_offer_annotate_and_review_paths():
     assert 'VSAnnotate' in projects
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        '已知缺陷（本轮不修）：web/projects.js:810 仍然写 `$("#projectDesc")`，'
-        '但「项目描述不放在 appbar」之后这个元素已从 index.html 删除 '
-        '——保存项目设置时会抛 TypeError（保存已成功，界面停在报错上）。'
-    ),
-)
+def test_entry_buttons_follow_backend_capabilities():
+    """行内按钮看后端算好的 can_* —— 前端自己拼权限会放过只读成员。"""
+    app = (WEB / 'app.js').read_text(encoding='utf-8')
+    assert 'row.can_annotate' in app
+    assert 'row.can_review' in app
+    assert 'applyProjectCaps' in app
+    assert 'activeProject.can_upload' in app
+    assert 'activeProject.can_manage' in app
+
+
 def test_modules_query_only_existing_ids(page):
     """模块里 `$("#id")` 引用的元素必须在 index.html 里存在。"""
     known = set(page.ids)

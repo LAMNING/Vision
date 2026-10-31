@@ -120,6 +120,8 @@ let thumbnailUrls = [];
 let selectedFiles = [];
 let selectionPreviewUrls = [];
 let activeProject = null;
+// 登录账号：顶栏 `VS.probe()` 拿到后缓存在这里，图片详情拿它判断「是不是我上传的」
+let activeAccount = null;
 let loadedImages = [];
 let imageLoadPromise = null;
 let imagesLoaded = false;
@@ -150,6 +152,7 @@ loadProjectTargets();
 function setAccountBadge(account) {
   const fallback = localStorage.getItem("vision_account_name");
   const view = account || { username: fallback || "参赛成员" };
+  if (account) activeAccount = account;
   appAccountName.textContent = VS.displayName(view);
   VS.fillAvatar(appAvatar, account);
 }
@@ -655,7 +658,12 @@ function renderImages(images) {
     if (!images.some((image) => Number(image.id) === Number(id))) pickedImages.delete(id);
   });
   if (!images.length) {
-    showStatus("还没有图像数据", "点右上角「上传图片」，选好的图会出现在这里。");
+    showStatus(
+      "还没有图像数据",
+      canUploadInProject()
+        ? "点右上角「上传图片」，选好的图会出现在这里。"
+        : "只有项目管理者或标注员能上传图片，等他们传完就会出现在这里。"
+    );
     syncImageToolbar();
     syncImagesMeta();
     return;
@@ -1108,8 +1116,31 @@ function loadProject(project, { force = true } = {}) {
   activeProject = project;
   imagesLoaded = false;
   imageLoadPromise = null;
+  applyProjectCaps();
   loadProjectTargets().catch(() => {});
   return loadImages({ force });
+}
+
+// 项目里能做什么由后端算好的 can_upload / can_manage 决定：
+// 只读成员不该看到「上传图片」「移除所选」「设置识别目标」，点下去只会收到 403。
+function canUploadInProject() {
+  return !activeProject || activeProject.can_upload !== false;
+}
+
+function applyProjectCaps() {
+  const canUpload = canUploadInProject();
+  const canManage = !activeProject || activeProject.can_manage !== false;
+  if (projectImageUpload) projectImageUpload.hidden = !canUpload;
+  if (removeSelected) removeSelected.hidden = !canUpload;
+  if (openTargetSettings) openTargetSettings.hidden = !canManage;
+}
+
+// 图片详情里的「删除图片」：后端只认上传者或空间 owner/admin，
+// 所以这里按「上传者本人 或 能管项目」放行，其余人直接不显示按钮。
+function canDeleteImage(image) {
+  if (currentView !== "project" || !activeProject) return true;
+  if (activeProject.can_manage) return true;
+  return Boolean(activeAccount && image.uploader_account_id === activeAccount.id);
 }
 
 const ACTIVE_TASK_STATES = new Set(["draft", "queued", "auto_annotating"]);
@@ -1575,7 +1606,7 @@ async function openImageDetail(image, options = {}) {
   currentImageContext = {
     source: options.source || "personal",
     analysisImageId: Number(options.analysisImageId || image.id),
-    canDelete: options.canDelete !== false,
+    canDelete: options.canDelete !== false && canDeleteImage(image),
   };
   detailTitle.textContent = image.filename;
   detailDimensions.textContent = `${image.width || "?"} × ${image.height || "?"}`;
@@ -1609,15 +1640,10 @@ async function openImageDetail(image, options = {}) {
       .listImageTasks(activeProject.id, image.id)
       .then((rows) => {
         if (currentImage !== image) return;
-        const editable = (rows || []).find((row) =>
-          row.task_status === "rejected_fix"
-          || row.task_status === "rejected_reannotate"
-          || (row.task_status === "queued" && row.task_mode === "manual")
-        );
-        // 待复核的图（自动跑完 / 人工标完、任务还没裁决）可以直接从详情进复核弹窗
-        const reviewable = (rows || []).find(
-          (row) => row.task_status === "auto_annotated" && row.annotation_status === "annotated"
-        );
+        // 能不能改 / 能不能审都由后端算好（can_annotate / can_review），
+        // 这里只负责显不显示按钮——前端自己拼权限会放过只读成员，点进去才被 403 挡回来。
+        const editable = (rows || []).find((row) => row.can_annotate);
+        const reviewable = (rows || []).find((row) => row.can_review);
         if (reviewable && detailReview) {
           detailReview.hidden = false;
           detailReview.onclick = () => {

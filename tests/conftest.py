@@ -133,17 +133,40 @@ def upload_images(client, user, project_id, count=1, size=(48, 32)):
     return [row['id'] for row in response.json()]
 
 
-def create_task(client, user, project_id, image_ids, *, mode='manual', review_required=True, name='任务'):
+def create_task(client, user, project_id, image_ids, *, mode='manual', review_required=True,
+                name='任务', assignee_account_id=None, reviewer_account_id=None):
+    payload = {
+        'project_id': project_id,
+        'name': name,
+        'mode': mode,
+        'image_ids': image_ids,
+        'review_required': review_required,
+    }
+    if assignee_account_id is not None:
+        payload['assignee_account_id'] = assignee_account_id
+    if reviewer_account_id is not None:
+        payload['reviewer_account_id'] = reviewer_account_id
     response = client.post(
         f'/projects/{project_id}/tasks',
-        json={
-            'project_id': project_id,
-            'name': name,
-            'mode': mode,
-            'image_ids': image_ids,
-            'review_required': review_required,
-        },
+        json=payload,
         headers=user.headers,
+    )
+    assert response.status_code in (200, 201), response.text
+    return response.json()
+
+
+def whoami(client, user):
+    """账号 id：指派 / 复核都要用到。"""
+    response = client.get('/auth/me', headers=user.headers)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def add_member(client, owner, project_id, account_id, role='annotator'):
+    response = client.post(
+        f'/projects/{project_id}/members',
+        json={'account_id': account_id, 'role': role},
+        headers=owner.headers,
     )
     assert response.status_code in (200, 201), response.text
     return response.json()

@@ -12,7 +12,11 @@ from app.data.crud import project_category as category_crud
 from app.data.crud import review as review_crud
 from app.data.crud import task as task_crud
 from app.data.crud import task_image as task_image_crud
-from app.data.crud.project_access import ProjectAccess, require_view
+from app.data.crud.project_access import (
+    ProjectAccess,
+    can_edit_task,
+    require_view,
+)
 from app.data.task_image import TaskImage
 from app.deps import CurrentAccount, DBSession
 from app.errors import (
@@ -66,12 +70,16 @@ def _require_can_create(access: ProjectAccess) -> None:
 def _can_edit_annotations(
     access: ProjectAccess, account: Account, task: Task
 ) -> bool:
-    '''人工标注/返修：管理者、提交者、被指派人、项目 annotator 都可以改。'''
-    return bool(
-        access.can_manage
-        or task.submitter_account_id == account.id
-        or task.assignee_account_id == account.id
-        or 'annotator' in access.roles
+    '''人工标注/返修：管理者、提交者、被指派人、项目 annotator 都可以改。
+
+    口径住在 ``project_access.can_edit_task``——「图像」列表与看图页也要用它，
+    三处各写一遍迟早会飘。
+    '''
+    return can_edit_task(
+        access,
+        account.id,
+        submitter_id=task.submitter_account_id,
+        assignee_id=task.assignee_account_id,
     )
 
 
