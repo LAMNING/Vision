@@ -22,6 +22,12 @@ const selectionSummary = document.querySelector("#selectionSummary");
 const analysisTargets = document.querySelector("#analysisTargets");
 const confirmAnalysis = document.querySelector("#confirmAnalysis");
 const clearSelection = document.querySelector("#clearSelection");
+// 上传前的三个选项：标注方式 / 目标空间 / 指派给谁
+const uploadMode = document.querySelector("#uploadMode");
+const uploadSpace = document.querySelector("#uploadSpace");
+const uploadAssigneeWrap = document.querySelector("#uploadAssigneeWrap");
+const uploadAssignee = document.querySelector("#uploadAssignee");
+const uploadOptionsHint = document.querySelector("#uploadOptionsHint");
 const uploadToast = document.querySelector("#uploadToast");
 const uploadToastTitle = document.querySelector("#uploadToastTitle");
 const uploadToastDetail = document.querySelector("#uploadToastDetail");
@@ -165,16 +171,18 @@ VS.probe()
     setAccountBadge(me);
     // 平台管理入口只给管理员；admin.js 里还会再校验一次
     railAdmin.hidden = me.platform_role !== "admin";
+    // 新账号首次进入时走一遍新手引导（每个账号只出现一次）
+    window.VSGuide?.maybeStart?.(me);
   })
   .catch(() => {});
 
 /* ---------------- 企业标识：Logo 右侧分隔栏 + 头像徽章 ---------------- */
 
-// 徽章本身是 CSS 画的（html.has-enterprise 时给头像右下角加 V），
+// 徽章不再是叠在头像上的角标（见 styles.css），改成名字后面的「企业」小标签，
 // 这里只负责「有没有企业身份」和分隔栏文案。
 const brandEnterprise = document.querySelector("#brandEnterprise");
 const brandEntName = document.querySelector("#brandEntName");
-const brandEntId = document.querySelector("#brandEntId");
+const appEntTag = document.querySelector("#appEntTag");
 
 // 最近一次拿到的企业身份。徽标回答的是「你在哪个企业里」，
 // 所以个人 / 小组 / 平台管理页都不该露出它（以前它会一路跟到平台管理页）。
@@ -189,6 +197,7 @@ function enterpriseSpaceActive() {
 function syncEnterpriseBrand() {
   const known = !!(enterpriseBrand && enterpriseBrand.name);
   document.documentElement.classList.toggle("has-enterprise", known);
+  if (appEntTag) appEntTag.hidden = !known;
   brandEnterprise.hidden = !known || !enterpriseSpaceActive();
 }
 
@@ -196,10 +205,9 @@ function setEnterpriseBrand(ent) {
   enterpriseBrand = ent && ent.name ? ent : null;
   if (!enterpriseBrand) {
     brandEntName.textContent = "—";
-    brandEntId.textContent = "—";
   } else {
     brandEntName.textContent = enterpriseBrand.name;
-    brandEntId.textContent = `ENT-${enterpriseBrand.id}`;
+    // 编号只在右上角的企业切换器上出现一次就够，顶栏不重复挂 ENT-x
     brandEnterprise.title = `${enterpriseBrand.name} · 企业 ID ENT-${enterpriseBrand.id}（${enterpriseBrand.my_role || "成员"}）`;
   }
   syncEnterpriseBrand();
@@ -274,6 +282,9 @@ function setAppContext({ kicker, title } = {}) {
 }
 
 function showView(view) {
+  // 换栏目时页面还停在上一页的滚动位置，新品种类的第一屏往往就是「一片空白」，
+  // 看起来像点了没反应。只在真的换了栏目时回到顶部，同一栏目的重新渲染不动滚动。
+  const viewChanged = currentView !== view;
   currentView = view;
   // 图片详情和标注工作台都是盖在内容区上面的独立层。不先收掉它们，
   // 点工具轨切栏目时内容区仍是 hidden，看起来就是"点了没反应"。
@@ -311,7 +322,9 @@ function showView(view) {
   if (view === "admin" && window.VSAdmin) window.VSAdmin.enter();
   // 企业徽标只在企业空间（以及企业里的项目页）出现，切到别的栏目就收掉
   syncEnterpriseBrand();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  // 要「立刻」回到顶部：smooth 会跟页面里同时发生的尺寸变化打架，中途被顶掉，
+  // 结果就是用户点了菜单却停在旧的滚动位置。同一栏目就别动滚动。
+  if (viewChanged) window.scrollTo({ top: 0, behavior: "instant" });
 }
 
 railSpace.addEventListener("click", () => {
@@ -468,14 +481,13 @@ function toggleDialog(dialog) {
   else closeDialog(dialog);
 }
 
-/* 设置是同一个弹窗，两个入口各自定位到对应小节：
-   「个人与账号」跳个人资料，「设置」跳外观与主题。 */
+/* 设置是同一个弹窗，两个入口各自落到对应分区：
+   「个人与账号」落到个人资料，「设置」落到外观与主题。
+   抽屉里的分区切换在 settings.js，这里只负责把它打开并指定分区。 */
 function openSettings(section) {
-  const target = { profile: "#settingsProfileSection", theme: "#settingsThemeSection", security: "#settingsSecuritySection" }[section];
   openDialog(settingsDialog);
-  const node = target && document.querySelector(target);
-  if (!node) return;
-  window.requestAnimationFrame(() => node.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+  const pane = ["profile", "theme", "upload", "space", "security"].includes(section) ? section : "profile";
+  window.VSSettings?.showPane?.(pane);
 }
 
 railProfile.addEventListener("click", () => openSettings("profile"));
@@ -627,6 +639,45 @@ const IMAGE_STAGE = {
   failed: { label: "标注失败", tone: "reject" },
 };
 
+// 任务原始状态：比 stage 细，能把「排队中」「模型分析中」这种过程态说清楚。
+// live = 还在跑，标签后面加一个呼吸点，避免长时间没变化看起来像卡死。
+const TASK_IMAGE_STATUS = {
+  draft: { label: "草稿", tone: "muted" },
+  queued: { label: "排队中", tone: "wait", live: true },
+  auto_annotating: { label: "模型分析中", tone: "info", live: true },
+  auto_annotated: { label: "待复核", tone: "info" },
+  rejected_fix: { label: "退回修改", tone: "reject" },
+  rejected_reannotate: { label: "退回重标", tone: "reject" },
+  approved: { label: "已通过", tone: "pass" },
+  failed: { label: "标注失败", tone: "reject" },
+  cancelled: { label: "已取消", tone: "muted" },
+};
+
+function parseUtc(value) {
+  if (!value) return null;
+  const text = String(value);
+  const normalized = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(text) ? text : `${text}Z`;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** 标注用时：从模型真正开跑算起，到本次处理结束为止，排队等待不计入。 */
+function durationText(image) {
+  const started = parseUtc(image.task_started_at) || parseUtc(image.task_created_at);
+  if (!started) return "";
+  // processed_at 是「标注跑完」的时刻；completed_at 要等复核通过才有。
+  // 只有正在跑的才拿当前时间兜底，否则排队中/已结束却缺时间戳的会虚增。
+  const running = image.task_status === "auto_annotating";
+  const end = parseUtc(image.task_processed_at) || parseUtc(image.task_completed_at) || (running ? new Date() : null);
+  if (!end) return "";
+  const seconds = Math.max(0, Math.round((end - started) / 1000));
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} 分 ${seconds % 60} 秒`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours} 小时 ${minutes % 60} 分`;
+}
+
 const REVIEW_TAG = {
   none: "未审核",
   pending: "未审核",
@@ -684,7 +735,7 @@ function renderImages(images) {
     ["file-col-pick", ""],
     ["file-col-name", "文件名"],
     ["file-col-meta", "尺寸 / 大小"],
-    ["file-col-status", "标注 / 审核"],
+    ["file-col-status", "状态"],
     ["file-col-task", "任务"],
     ["file-col-time", "上传时间"],
     ["file-col-actions", "操作"],
@@ -742,30 +793,28 @@ function imageRow(image) {
   );
 
   const statusCell = el("span", "file-col-status");
-  const annotateTag = el(
-    "span",
-    `tag tag-${image.annotated ? "pass" : "muted"}`,
-    image.annotated ? "已标注" : "未标注"
-  );
-  const reviewTone =
-    image.review_status === "approved"
-      ? "pass"
-      : image.review_status === "rejected"
-        ? "reject"
-        : "muted";
-  const reviewTag = el(
-    "span",
-    `tag tag-${reviewTone}`,
-    REVIEW_TAG[image.review_status] || "未审核"
-  );
-  statusCell.append(annotateTag, reviewTag);
+  const taskState = image.task_status ? TASK_IMAGE_STATUS[image.task_status] : null;
+  if (taskState) {
+    const mainTag = el("span", `tag tag-${taskState.tone}`, taskState.label);
+    if (taskState.live) mainTag.classList.add("is-live");
+    statusCell.append(mainTag);
+    const span = durationText(image);
+    if (span) {
+      const hint = el("small", "file-duration", `(${span})`);
+      hint.title = "模型处理用时，不含排队等待";
+      statusCell.append(hint);
+    }
+  } else {
+    const stageTag = el("span", `tag tag-${stage.tone}`, image.task_count ? stage.label : "未加入任务");
+    statusCell.append(stageTag);
+  }
 
   const taskCell = el(
     "span",
     "file-col-task",
     image.task_count
       ? `${image.task_name || `任务 #${image.task_id}`}${image.task_count > 1 ? ` · 共 ${image.task_count} 个任务` : ""}`
-      : "未加入任务"
+      : "—"
   );
 
   const timeCell = el("span", "file-col-time", imageWhen(image.created_at));
@@ -1082,6 +1131,52 @@ async function loadThumbnail(image, target) {
   }
 }
 
+// 模型任务是异步跑的：提交完页面拿到的是「排队中 / 标注中」，
+// 之后没有任何推送，所以必须自己盯着。只要列表里还有在跑的任务就每 3 秒重取一次，
+// 跑完自动停；期间顺带把「我的任务」和统计一起刷新，不用用户点刷新。
+const RUNNING_TASK_STATUS = new Set(["queued", "auto_annotating"]);
+let statusPollTimer = 0;
+let statusPollCount = 0;
+let statusNoteOwned = false; // 状态栏那句话是不是轮询写的，是的话跑完要收回去
+const STATUS_POLL_MS = 3000;
+const STATUS_POLL_LIMIT = 100; // 约 5 分钟，防止模型卡死时无限轮询
+
+function stopStatusPoll() {
+  clearTimeout(statusPollTimer);
+  statusPollTimer = 0;
+  statusPollCount = 0;
+  statusNoteOwned = false;
+}
+
+function scheduleStatusPoll(images) {
+  const running = (images || []).filter((item) => RUNNING_TASK_STATUS.has(item.task_status));
+  clearTimeout(statusPollTimer);
+  statusPollTimer = 0;
+  if (!running.length) {
+    if (statusPollCount > 0) {
+      // 刚跑完：统计与「我的任务」一次性对齐，轮询期间那行提示收回去
+      statusPollCount = 0;
+      if (statusNoteOwned) {
+        statusNoteOwned = false;
+        setImageStatus?.("");
+      }
+      window.VSProjects?.refreshPersonal?.();
+      window.VSTeam?.refreshResults?.();
+      window.VSTeamEnterprise?.refresh?.();
+    }
+    return;
+  }
+  if (statusPollCount >= STATUS_POLL_LIMIT) return;
+  statusPollCount += 1;
+  statusNoteOwned = true;
+  setImageStatus?.(`模型正在分析 ${running.length} 张图片…`);
+  statusPollTimer = window.setTimeout(() => {
+    if (!activeProject) return;
+    imagesLoaded = false;
+    loadImages({ force: true }).catch(() => {});
+  }, STATUS_POLL_MS);
+}
+
 async function loadImages({ force = false } = {}) {
   if (imageLoadPromise) return imageLoadPromise;
   if (imagesLoaded && !force) return loadedImages;
@@ -1100,6 +1195,7 @@ async function loadImages({ force = false } = {}) {
     const images = Array.isArray(page) ? page : (page.items || []);
     imagesLoaded = true;
     renderImages(images);
+    scheduleStatusPoll(images);
     return images;
   })().finally(() => { imageLoadPromise = null; });
   return imageLoadPromise;
@@ -1116,6 +1212,7 @@ function loadProject(project, { force = true } = {}) {
   activeProject = project;
   imagesLoaded = false;
   imageLoadPromise = null;
+  stopStatusPoll();
   applyProjectCaps();
   loadProjectTargets().catch(() => {});
   return loadImages({ force });
@@ -1493,12 +1590,19 @@ async function syncAnalysisConfig(projectId, targets, { boxThreshold } = {}) {
   await call(() => sdk.updateAutoConfig(projectId, fields));
 }
 
-async function submitAnalysisTask(project, images, targets) {
+/**
+ * 上传后立刻建任务。
+ * auto   → 提交给模型，跑完进复核；
+ * manual → 指派给某个人（默认自己），在标注工作台里画框。
+ */
+async function submitUploadTask(project, images, { mode = "auto", targets = [], assignee = null } = {}) {
   await syncAnalysisConfig(project.id, targets);
+  const stamp = new Date().toLocaleString("zh-CN", { hour12: false });
   const task = await call(() => sdk.createTask(project.id, {
-    name: `自动分析 ${new Date().toLocaleString("zh-CN", { hour12: false })}`,
+    name: mode === "manual" ? `人工标注 ${stamp}` : `自动分析 ${stamp}`,
     imageIds: images.map((image) => image.id),
-    mode: "auto",
+    mode,
+    assigneeAccountId: mode === "manual" ? (assignee || activeAccount?.id || null) : assignee,
   }));
   const submitted = await call(() => sdk.submitTask(project.id, task.id));
   localStorage.setItem(`vision_recent_task_${project.id}`, String(task.id));
@@ -1837,7 +1941,7 @@ function askUploadTarget(groups, enterprises) {
       note: groups.length > 1 ? `小组空间 · 共 ${groups.length} 个小组，可在小组页切换` : "小组空间 · 归档到小组成果",
     },
     {
-      id: "enterprise", icon: "corporate_fare", title: ent.name,
+      id: "enterprise", icon: "business", title: ent.name,
       note: ent.my_role === "member" ? "企业空间 · 上传后需要管理员审核" : "企业空间 · 直接进入企业图库",
     },
   ];
@@ -1904,6 +2008,196 @@ async function sendFilesTo(files, destination, groups, enterprises) {
   }
 }
 
+/* ---------------- 上传选项：传到哪 / 怎么标 / 指派给谁 ---------------- */
+
+// 除了个人空间，还有哪些小组与企业可以作为上传目标
+let uploadSpaces = [];
+// 「设置 → 上传偏好」里存的默认值，第一次渲染时套用一次，之后尊重用户当次的选择
+let uploadPrefApplied = false;
+
+const UPLOAD_PREF_KEY = "vision_upload_pref";
+
+function readUploadPref() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(UPLOAD_PREF_KEY) || "{}");
+    return { mode: raw.mode === "manual" ? "manual" : "auto", space: raw.space || "personal" };
+  } catch {
+    return { mode: "auto", space: "personal" };
+  }
+}
+
+function writeUploadPref(patch) {
+  const next = { ...readUploadPref(), ...patch };
+  try { localStorage.setItem(UPLOAD_PREF_KEY, JSON.stringify(next)); } catch { /* 无存储权限时仅本次生效 */ }
+  return next;
+}
+
+function syncPrefSpaceOptions() {
+  const pref = document.querySelector("#prefUploadSpace");
+  if (!pref) return;
+  const keep = pref.value || readUploadPref().space;
+  pref.replaceChildren();
+  const personal = document.createElement("option");
+  personal.value = "personal";
+  personal.textContent = "个人空间";
+  pref.append(personal);
+  uploadSpaces.forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.value;
+    option.textContent = `${item.kind === "team" ? "小组" : "企业"} · ${item.name}`;
+    pref.append(option);
+  });
+  pref.value = [...pref.options].some((option) => option.value === keep) ? keep : "personal";
+}
+
+function applyUploadPref() {
+  const pref = readUploadPref();
+  if (uploadMode) uploadMode.value = pref.mode;
+  if (uploadSpace) {
+    uploadSpace.value = [...uploadSpace.options].some((option) => option.value === pref.space)
+      ? pref.space
+      : "personal";
+  }
+  syncUploadDestination();
+}
+
+async function refreshUploadOptions() {
+  if (!uploadSpace) return;
+  const keep = uploadSpace.value;
+  uploadSpaces = [];
+  const [groups, enterprises] = await Promise.all([
+    sdk.listGroups().catch(() => []),
+    sdk.listEnterprises().catch(() => []),
+  ]);
+  (groups || []).forEach((group) => {
+    uploadSpaces.push({ value: `team:${group.id}`, kind: "team", groupId: group.id, name: group.name });
+  });
+  (enterprises || []).forEach((ent) => {
+    uploadSpaces.push({
+      value: `enterprise:${ent.id}`,
+      kind: "enterprise",
+      groupId: ent.group_id,
+      entId: ent.id,
+      name: ent.name,
+    });
+  });
+
+  uploadSpace.replaceChildren();
+  const personal = document.createElement("option");
+  personal.value = "personal";
+  personal.textContent = "个人空间";
+  uploadSpace.append(personal);
+  uploadSpaces.forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.value;
+    option.textContent = `${item.kind === "team" ? "小组" : "企业"} · ${item.name}`;
+    uploadSpace.append(option);
+  });
+  if (uploadSpaces.some((item) => item.value === keep)) uploadSpace.value = keep;
+  syncPrefSpaceOptions();
+  if (!uploadPrefApplied) {
+    uploadPrefApplied = true;
+    applyUploadPref();
+  } else {
+    syncUploadDestination();
+  }
+}
+
+function currentDestination() {
+  const value = uploadSpace?.value || "personal";
+  if (value === "personal") return { kind: "personal", groupId: null, name: "个人空间" };
+  return uploadSpaces.find((item) => item.value === value) || { kind: "personal", groupId: null, name: "个人空间" };
+}
+
+async function loadAssignees(destination) {
+  if (!uploadAssignee) return;
+  uploadAssignee.replaceChildren();
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "不指派 · 我来做";
+  uploadAssignee.append(none);
+  try {
+    const members = destination.kind === "team"
+      ? await call(() => sdk.listGroupMembers(destination.groupId))
+      : await call(() => sdk.listEnterpriseMembers(destination.entId));
+    (members || []).forEach((member) => {
+      const account = member.account || {
+        id: member.account_id,
+        username: `user_${member.account_id}`,
+      };
+      const option = document.createElement("option");
+      option.value = String(member.account_id ?? account.id);
+      option.textContent = VS.displayName(account);
+      uploadAssignee.append(option);
+    });
+    // 默认指派给自己：这批图通常就是自己领下来的活
+    const mine = [...uploadAssignee.options].find(
+      (option) => String(option.value) === String(activeAccount?.id)
+    );
+    if (mine) uploadAssignee.value = mine.value;
+  } catch {
+    /* 拉不到成员就保持「不指派」，不挡住上传 */
+  }
+}
+
+function syncUploadDestination() {
+  const destination = currentDestination();
+  const toPersonal = destination.kind === "personal";
+  if (uploadAssigneeWrap) uploadAssigneeWrap.hidden = toPersonal;
+  if (!toPersonal) loadAssignees(destination);
+  if (uploadOptionsHint) {
+    uploadOptionsHint.textContent = toPersonal
+      ? "这批图片会进入个人空间；选人工标注会直接进入「我的任务」。"
+      : `这批图片会放进「${destination.name}」的默认工作区，被指派的人会在个人空间看到它。`;
+  }
+  if (confirmAnalysis) {
+    const manual = uploadMode?.value === "manual";
+    confirmAnalysis.innerHTML = manual ? "确认并创建标注任务 <span>→</span>" : "确认并开始分析 <span>→</span>";
+  }
+}
+
+uploadSpace?.addEventListener("change", syncUploadDestination);
+uploadMode?.addEventListener("change", syncUploadDestination);
+
+/* 设置里的「上传偏好」：只是把默认值记到本地，每次上传仍可临时改 */
+const prefUploadMode = document.querySelector("#prefUploadMode");
+const prefUploadSpace = document.querySelector("#prefUploadSpace");
+const uploadPrefStatus = document.querySelector("#uploadPrefStatus");
+
+function renderUploadPref() {
+  const pref = readUploadPref();
+  if (prefUploadMode) prefUploadMode.value = pref.mode;
+  syncPrefSpaceOptions();
+  if (prefUploadSpace) {
+    prefUploadSpace.value = [...prefUploadSpace.options].some((option) => option.value === pref.space)
+      ? pref.space
+      : "personal";
+  }
+}
+
+prefUploadMode?.addEventListener("change", () => {
+  writeUploadPref({ mode: prefUploadMode.value });
+  if (uploadMode) uploadMode.value = prefUploadMode.value;
+  syncUploadDestination();
+  VS.status(uploadPrefStatus, "已记住这个默认方式");
+});
+
+prefUploadSpace?.addEventListener("change", () => {
+  writeUploadPref({ space: prefUploadSpace.value });
+  if (uploadSpace) {
+    uploadSpace.value = [...uploadSpace.options].some((option) => option.value === prefUploadSpace.value)
+      ? prefUploadSpace.value
+      : "personal";
+  }
+  syncUploadDestination();
+  VS.status(uploadPrefStatus, "已记住这个默认目标");
+});
+
+settingsDialog.addEventListener("vision:open", () => {
+  renderUploadPref();
+  VS.status(uploadPrefStatus, "");
+});
+
 confirmAnalysis.addEventListener("click", async () => {
   const files = [...selectedFiles];
   if (!files.length) return;
@@ -1919,33 +2213,21 @@ confirmAnalysis.addEventListener("click", async () => {
     return;
   }
 
-  // 同时在小组与企业里时，先问这批图归哪 —— 不同目标走完全不同的链路，
-  // 猜错会让图片落到错误的空间，所以宁可多问一次。
-  let groups = [];
-  let enterprises = [];
-  try {
-    [groups, enterprises] = await Promise.all([
-      sdk.listGroups().catch(() => []),
-      sdk.listEnterprises().catch(() => []),
-    ]);
-  } catch {
-    /* 探测失败就走默认的个人工作台，不打断主流程 */
-  }
-  if ((groups || []).length && (enterprises || []).length) {
-    const destination = await askUploadTarget(groups, enterprises);
-    if (!destination) return;
-    if (destination !== "personal") {
-      await sendFilesTo(files, destination, groups, enterprises);
-      return;
-    }
-  }
+  const destination = currentDestination();
+  const mode = uploadMode?.value === "manual" ? "manual" : "auto";
+  const assignee = Number(uploadAssignee?.value) || null;
 
   confirmAnalysis.disabled = true;
   confirmAnalysis.textContent = "正在上传…";
-  uploadFeedback.textContent = `正在导入 ${files.length} 个已确认文件…`;
+  uploadFeedback.textContent = `正在导入 ${files.length} 个文件到${destination.name}…`;
 
   try {
-    const project = await ensureImageProject();
+    // 目标项目：个人空间用当前工作区，小组 / 企业用它们各自的默认工作区
+    const project = destination.kind === "personal"
+      ? await ensureImageProject()
+      : await window.VSProjects?.ensureProjectFor?.(destination.kind, destination.groupId);
+    if (!project) throw new Error("这个空间还没有可用的工作区，请联系空间管理员");
+
     let importedCount = 0;
     const importedImages = [];
     // 后端单次最多 20 张，这里按批切分，逐批提交
@@ -1956,22 +2238,42 @@ confirmAnalysis.addEventListener("click", async () => {
       importedCount += list.length;
       importedImages.push(...list);
     }
-    confirmAnalysis.textContent = "正在提交模型分析…";
-    uploadFeedback.textContent = "图片已导入，正在创建自动分析任务…";
-    await submitAnalysisTask(project, importedImages, targets);
+    confirmAnalysis.textContent = mode === "manual" ? "正在创建标注任务…" : "正在提交模型分析…";
+    uploadFeedback.textContent = mode === "manual"
+      ? "图片已导入，正在创建人工标注任务…"
+      : "图片已导入，正在创建自动分析任务…";
+    await submitUploadTask(project, importedImages, { mode, targets, assignee });
     renderProjectTargets(targets);
     analysisTargetsDirty = false;
     selectedFiles = [];
     renderSelection();
-    uploadFeedback.textContent = `已导入 ${importedCount} 张图片，模型分析任务已提交`;
-    showUploadToast(`已提交 ${importedCount} 张图片`, "模型正在分析，结果会自动更新到图像数据");
+    uploadFeedback.textContent = mode === "manual"
+      ? `已导入 ${importedCount} 张，人工标注任务已建好`
+      : `已导入 ${importedCount} 张图片，模型分析任务已提交`;
+    showUploadToast(
+      `已提交 ${importedCount} 张图片`,
+      mode === "manual"
+        ? "在「我的任务」里点开就能画框"
+        : `模型正在分析，结果会出现在${destination.name}`
+    );
     // 列表在后台刷新；即使这一步失败也不该把"上传成功"改成报错
-    loadImages({ force: true }).catch(() => {});
+    if (destination.kind === "personal") {
+      loadImages({ force: true }).catch(() => {});
+      // 上传完把视线带到图片列表，否则用户还停在选择区，看不到新提交的图
+      window.setTimeout(() => {
+        document.querySelector("#personalDataTitle")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 320);
+    } else {
+      window.VSTeam?.refreshResults?.();
+      window.VSTeamEnterprise?.refresh?.();
+    }
+    // 任务可能落在别的空间，但「我的任务」永远在个人空间，统一刷一次
+    window.VSProjects?.refreshPersonal?.();
   } catch (error) {
     uploadFeedback.textContent = error.message === "Failed to fetch" ? "后端尚未启动，请稍后重试" : error.message;
   } finally {
     confirmAnalysis.disabled = false;
-    confirmAnalysis.innerHTML = "确认并开始分析 <span>→</span>";
+    syncUploadDestination();
   }
 });
 
@@ -2083,9 +2385,25 @@ sendToGroup.addEventListener("click", () => {
 
 // 小组成果通过 content_hash 找回个人图库中的原图 id，沿用真实分析状态与标注。
 // 这是当前远端没有“服务端共享原图”接口时的前端桥接，不伪造任何状态。
+/** 从小组 / 企业页点「上传图片」：切到个人空间的上传区，预设目标后打开选文件。 */
+async function startUpload(kind, id) {
+  showView("personal");
+  await refreshUploadOptions();
+  const value = `${kind}:${id}`;
+  if ([...uploadSpace.options].some((option) => option.value === value)) {
+    uploadSpace.value = value;
+    syncUploadDestination();
+  }
+  imageUpload.click();
+}
+
 window.VSApp = {
   openImageDetail,
   loadProject,
+  /** 个人空间没有项目页，由 projects.js 直接把默认工作区挂到 activeProject 上。 */
+  focusProject: loadProject,
+  refreshUploadOptions,
+  startUpload,
   async findPersonalImage(image) {
     if (!image) return null;
     if (!imagesLoaded) await loadImages({ force: false }).catch(() => []);

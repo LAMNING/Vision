@@ -327,11 +327,60 @@
     renderQuota();
     renderNotice();
     renderMembers();
+    renderSpacePeople();
     renderResults();
     renderReview();
     renderLogs();
     renderReport();
     renderTabs();
+  }
+
+  // 空间页首屏的成员预览。头像上不叠头衔角标（第 17 项），头衔跟在名字后面。
+  function renderSpacePeople() {
+    const box = $("#enterprisePeople");
+    if (!box) return;
+    // 成果回到页面后，左栏信息卡里已经有完整成员列表，这条横条就是重复一遍
+    if (grid && !grid.hidden) {
+      box.hidden = true;
+      box.replaceChildren();
+      return;
+    }
+    if (!members.length) {
+      box.hidden = true;
+      box.replaceChildren();
+      return;
+    }
+    box.hidden = false;
+
+    const head = el("div", "space-people-head");
+    const title = el("strong", "", "成员");
+    title.append(el("b", "", String(members.length)));
+    head.append(title);
+    if (canStaff()) {
+      const manage = el("button", "text-button", "管理成员");
+      manage.type = "button";
+      manage.addEventListener("click", () => manageBtn?.click());
+      head.append(manage);
+    }
+
+    const sorted = members
+      .slice()
+      .sort((a, b) => (ROLE_ORDER[a.role] - ROLE_ORDER[b.role]) || (b.upload_count - a.upload_count));
+
+    const row = el("div", "space-people-row");
+    sorted.slice(0, 8).forEach((member) => {
+      const account = member.account || { username: `user_${member.account_id}` };
+      const roleLabel = ROLE_LABEL[member.role] || member.role;
+      const chip = el("span", "space-person");
+      if (member.account_id === me?.id) chip.classList.add("is-me");
+      if (member.online) chip.append(el("span", "presence-dot is-online"));
+      chip.append(avatarNode(account, 26), el("small", "", displayName(account)));
+      if (member.role !== "member") chip.append(el("em", `role-tag role-${member.role}`, roleLabel));
+      chip.title = `${displayName(account)} · ${roleLabel}${member.online ? " · 在线" : ""}`;
+      row.append(chip);
+    });
+    if (members.length > 8) row.append(el("span", "space-person-more", `还有 ${members.length - 8} 人`));
+    box.replaceChildren(head, row);
   }
 
   function renderHead() {
@@ -773,7 +822,15 @@
     }
   });
 
-  uploadBtn.addEventListener("click", () => uploadInput.click());
+  // 企业上传同样转到个人空间的上传区：一次选好「自动 / 人工 + 指派给谁」，
+  // 分析结果留在企业图库里，不用再回图像数据页重传一遍。
+  uploadBtn.addEventListener("click", () => {
+    if (window.VSApp?.startUpload && current?.id) {
+      window.VSApp.startUpload("enterprise", current.id);
+      return;
+    }
+    uploadInput.click();
+  });
   uploadInput.addEventListener("change", async () => {
     const files = [...uploadInput.files];
     uploadInput.value = "";

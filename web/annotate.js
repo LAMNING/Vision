@@ -317,7 +317,7 @@
     renderStage();
     renderBoxList();
     updateActions();
-    status("#annotateStatus", "已撤销");
+    status("#annotateStatus", "已撤销", "ok");
   }
 
   function dropBox(key) {
@@ -624,7 +624,7 @@
       renderProgress();
       updateActions();
       if (!silent) {
-        status("#annotateStatus", items.length ? `已保存 ${items.length} 个标注框` : "已清空这张图的标注");
+        status("#annotateStatus", items.length ? `已保存 ${items.length} 个标注框` : "已清空这张图的标注", "ok");
       }
       return true;
     } catch (error) {

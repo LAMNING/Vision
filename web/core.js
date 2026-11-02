@@ -2,9 +2,31 @@
 // 全站唯一的后端入口：sdk.js。业务脚本不再自己写 fetch。
 // 这里只做四件事：建 SDK 实例、把错误翻成中文、缓存头像、提供几个 DOM 小工具。
 window.VS = (() => {
-  // 默认同源（后端用 web/ 托管前端）。要临时指向别的后端，在 sdk.js 之前写
-  // <script>window.__VS_BASE__ = "http://host:port";</script>
-  const BASE = window.__VS_BASE__ || location.origin;
+  // 默认同源（后端用 web/ 托管前端）。
+  // 要临时指向别的后端，两种办法：
+  //   1) 地址栏加 ?api=http://172.20.10.8:8000 （会记住，之后刷新不用再带）
+  //      想切回本机就 ?api=local
+  //   2) 在 sdk.js 之前写 <script>window.__VS_BASE__="http://host:port";</script>
+  const BASE_KEY = "vision-studio.apiBase";
+  function readBase() {
+    try {
+      const asked = new URLSearchParams(location.search).get("api");
+      if (asked !== null) {
+        const value = asked.trim();
+        if (!value || value === "local" || value === "same") {
+          localStorage.removeItem(BASE_KEY);
+        } else {
+          const url = /^https?:\/\//i.test(value) ? value : `http://${value}`;
+          localStorage.setItem(BASE_KEY, url.replace(/\/+$/, ""));
+        }
+      }
+      return localStorage.getItem(BASE_KEY) || location.origin;
+    } catch {
+      /* 隐私模式下 localStorage 不可写，退回同源 */
+      return location.origin;
+    }
+  }
+  const BASE = window.__VS_BASE__ || readBase();
   const TOKEN_KEY = "vision-studio.token";
   const LEGACY_KEY = "vision_access_token";
 
@@ -23,6 +45,46 @@ window.VS = (() => {
   function toLogin() {
     if (location.pathname.endsWith("login.html")) return;
     location.replace("login.html");
+  }
+
+  // 跨源接入时在界面上留个明示：现在看到的到底是哪台后端的数据。
+  // 只在 BASE 与页面不同源时出现；本机同源跑不会有任何东西。
+  function mountBackendTag() {
+    let remote;
+    try {
+      remote = new URL(BASE);
+    } catch {
+      return;
+    }
+    if (remote.origin === location.origin) return;
+
+    const tag = document.createElement("button");
+    tag.type = "button";
+    tag.className = "backend-chip";
+    tag.title = `当前数据来自 ${remote.origin}，点这里切回本机`;
+    const dot = document.createElement("span");
+    dot.className = "backend-chip-dot";
+    const label = document.createElement("span");
+    label.textContent = "远程后端";
+    const host = document.createElement("small");
+    host.textContent = remote.host;
+    tag.append(dot, label, host);
+    tag.addEventListener("click", () => {
+      try {
+        localStorage.removeItem(BASE_KEY);
+      } catch {
+        /* 隐私模式下写不进去，切回后照样同源 */
+      }
+      location.replace(location.pathname);
+    });
+
+    const bar = document.querySelector(".app-bar-trail");
+    if (bar) {
+      bar.prepend(tag);
+      return;
+    }
+    const form = document.querySelector(".auth-card form");
+    if (form && form.parentNode) form.parentNode.insertBefore(tag, form);
   }
 
   const sdk = new ImageLabelSDK({
@@ -260,11 +322,14 @@ window.VS = (() => {
       : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 
+  // error 传 true/"error" 走红字，传 "ok" 走绿字（保存成功），其余按中性灰。
+  // 标注台那行平时是操作引导，不能一路绿到底，否则「按住拖出矩形」像已经完成了。
   function status(target, message, error = false) {
     const node = typeof target === "string" ? document.querySelector(target) : target;
     if (!node) return;
     node.textContent = message;
-    node.classList.toggle("is-error", error);
+    node.classList.toggle("is-error", error === true || error === "error");
+    node.classList.toggle("is-ok", error === "ok");
   }
 
   /** 提交按钮置灰 + 统一「正在保存…」→ 成功/失败文案，多个表单共用。 */

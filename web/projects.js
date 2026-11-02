@@ -36,38 +36,45 @@
   let taskCreateBlocked = false; // 没有启用类目时拦住「创建任务」
   const loaded = { overview: false, tasks: false, members: false, categories: false, settings: false };
 
-  /* ---------------- 把旧面板搬进新容器 ---------------- */
+  /* ---------------- 空间设置抽屉里放什么 ---------------- */
 
   function relocate() {
-    // 个人空间的选择区 / 图像列表 → 项目页「图像」tab
-    // （原来的 .upload-hero 已经删掉，「图像分析与标注」大标题不再存在）
-    const imagesPane = $("#projectImagesPane");
-    const personal = document.querySelector('[data-view="personal"]');
-    if (imagesPane && personal) {
-      [personal.querySelector("#selectionPanel"), personal.querySelector(".personal-data")]
-        .filter(Boolean)
-        .forEach((node) => imagesPane.append(node));
-    }
+    // 这里原来把 #teamGrid / #enterpriseGrid 整块 append 进空间设置抽屉，连带把
+    // header 的「新建小组」也搬了进去。结果是：小组成果 / 企业图库——空间页最主要的
+    // 内容——要「更多 → 空间设置」两级才看得到，而设置里根本不该有图库。
+    // 现在成果留在页面上，抽屉只放真正的设置入口。
+    buildSettingsPane($("#teamSettingsPane"), {
+      title: "小组设置",
+      hint: "改资料、管成员。成果已经回到空间页，不用再进这里。",
+      items: [
+        { label: "编辑小组资料", detail: "改名称、简介，或删除小组", target: "#editTeamButton" },
+        { label: "管理成员", detail: "邀请、调整角色、移除成员", target: "#manageMembers" },
+      ],
+    });
+  }
 
-    // 小组的成员与图库 → 空间设置抽屉
-    const teamPane = $("#teamSettingsPane");
-    const teamGrid = $("#teamGrid");
-    const teamEmpty = $("#teamEmpty");
-    if (teamPane && teamGrid) teamPane.append(teamGrid);
-    if (teamPane && teamEmpty) teamPane.append(teamEmpty);
-    const newTeam = $("#newTeamButton");
-    if (teamPane && newTeam) {
-      const head = el("div", "drawer-subhead");
-      head.append(el("strong", "", "小组成员与图库"), newTeam);
-      teamPane.prepend(head);
-    }
-
-    // 企业的成员 / 图库 / 审核 / 记录 / 日报 → 空间设置抽屉
-    const entPane = $("#enterpriseSettingsPane");
-    const entGrid = $("#enterpriseGrid");
-    const entEmpty = $("#enterpriseEmpty");
-    if (entPane && entGrid) entPane.append(entGrid);
-    if (entPane && entEmpty) entPane.append(entEmpty);
+  // 抽屉里的设置入口：一行一个，点开就是原来的对话框
+  function buildSettingsPane(pane, { title, hint, items }) {
+    if (!pane) return;
+    pane.textContent = "";
+    const wrap = el("div", "settings-shortcut");
+    wrap.append(el("strong", "settings-shortcut-title", title));
+    wrap.append(el("p", "settings-shortcut-hint", hint));
+    items.forEach((item) => {
+      const button = el("button", "settings-shortcut-item");
+      button.type = "button";
+      const copy = el("span", "settings-shortcut-copy");
+      copy.append(el("strong", "", item.label), el("small", "", item.detail));
+      button.append(copy, el("span", "material-symbols-rounded", "chevron_right"));
+      button.addEventListener("click", () => {
+        const trigger = $(item.target);
+        closeDrawer();
+        // 抽屉有收起过渡，等它走完再开对话框，否则两层遮罩叠一起
+        window.setTimeout(() => trigger?.click(), 200);
+      });
+      wrap.append(button);
+    });
+    pane.append(wrap);
   }
 
   /* ---------------- 空间列表 ---------------- */
@@ -81,14 +88,429 @@
     window.VSBrand?.sync?.();
   }
 
+  /* ---------------- 默认项目：一个空间只有一份工作区 ---------------- */
+
+  // 用户不再「新建项目」。进入空间时自动确保有一个默认项目，
+  // 之后的图片、任务、类目全挂在它下面；列表里也只有这一行。
+  const DEFAULT_PROJECT_NAME = {
+    personal: "我的标注空间",
+    team: "小组标注空间",
+    enterprise: "企业标注空间",
+  };
+  const spaceProject = { personal: null, team: null, enterprise: null };
+
+  async function ensureSpaceProject(kind, groupId, { create = true } = {}) {
+    if (!groupId) return null;
+    const items = (await call(() => sdk.listVisibleProjects({ groupId }))) || [];
+    const alive = items.filter((item) => item.status !== "archived");
+    const remembered = alive.find((item) => item.id === spaceProject[kind]);
+    const found = remembered || alive[0];
+    if (found) {
+      spaceProject[kind] = found.id;
+      return found;
+    }
+    if (!create) return null;
+    try {
+      const created = await call(() =>
+        sdk.createProjectInGroup(groupId, DEFAULT_PROJECT_NAME[kind])
+      );
+      spaceProject[kind] = created.id;
+      return created;
+    } catch {
+      // 普通成员没有建项目的权限，交给空间管理员处理，页面显示等待态
+      return null;
+    }
+  }
+
+  /* ---------------- 个人空间：总结 + 我的任务 + 我的图片 ---------------- */
+
+  // 个人空间允许有多个项目。规则：
+  //   0 个 → 空状态 + 新建（新账号默认走这里，不再偷偷建一个默认项目）
+  //   1 个 → 直接打开
+  //   多个 → 先选，不自动进（用户明确要求「需要单独选择」）
+  let personalProjects = [];
+
+  function personalView() {
+    return document.querySelector('[data-view="personal"]');
+  }
+
+  /** 选项目阶段：把下面的任务/图片区整块藏起来，避免点不动又占地方。 */
+  function setPersonalChoosing(choosing) {
+    const view = personalView();
+    if (view) view.classList.toggle("is-choosing", choosing);
+  }
+
+  async function listPersonalProjects() {
+    const items = (await call(() => sdk.listVisibleProjects({ groupId: personalGroupId }))) || [];
+    return items.filter((item) => item.status !== "archived");
+  }
+
+  async function createPersonalProject(name) {
+    const clean = String(name || "").trim();
+    if (!clean) throw new Error("给项目起个名字吧");
+    const created = await call(() => sdk.createProjectInGroup(personalGroupId, clean));
+    spaceProject.personal = created.id;
+    return created;
+  }
+
+  /** 删除项目。后端是软删除：项目从列表消失，图片和任务记录留着但访问不到。 */
+  async function removeProject(project, { statusSelector } = {}) {
+    const name = project.name || `项目 #${project.id}`;
+    const confirmed = await window.confirmDanger({
+      kicker: "DELETE PROJECT",
+      title: `删除「${name}」？`,
+      message: "项目会从列表里移除，里面的图片和任务记录都访问不到了。",
+      detail: "这一步不能撤销。只想暂时收起来的话，进项目在「设置」里归档。",
+      confirmText: "删除项目",
+    });
+    if (!confirmed) return;
+    try {
+      await call(() => sdk.deleteProject(project.id));
+    } catch (error) {
+      if (statusSelector) status(statusSelector, error.message, true);
+      return;
+    }
+    // 记住的项目 id 一起清掉，否则下次进来还拿这个已删除的 id 去找
+    Object.keys(spaceProject).forEach((kind) => {
+      if (spaceProject[kind] === project.id) spaceProject[kind] = null;
+    });
+    spaceItems = spaceItems.filter((item) => item.id !== project.id);
+    if (activeSpace === "personal") {
+      await loadPersonal();
+      window.VSApp?.refreshUploadOptions?.();
+    } else {
+      await enterSpace(activeSpace);
+    }
+  }
+
+  async function enterPersonalProject(project) {
+    spaceProject.personal = project.id;
+    spaceItems = [project];
+    setPersonalChoosing(false);
+    await renderSummary(project);
+    window.VSApp?.refreshUploadOptions?.();
+    await window.VSApp?.focusProject?.(project);
+    await loadPersonalTasks(project);
+  }
+
   async function loadPersonal() {
-    const box = $("#personalProjectList");
     if (!personalGroupId) {
       const space = await call(() => sdk.mySpace());
       personalGroupId = space.id;
     }
-    spaceItems = await call(() => sdk.listVisibleProjects({ groupId: personalGroupId }));
-    renderList("personal", spaceItems);
+    personalProjects = await listPersonalProjects();
+    if (!personalProjects.length) {
+      spaceItems = [];
+      setPersonalChoosing(true);
+      renderPersonalPicker({ empty: true });
+      return;
+    }
+    if (personalProjects.length === 1) {
+      await enterPersonalProject(personalProjects[0]);
+      return;
+    }
+    // 多个项目：如果当前正在看其中某个（比如上传后刷新），保持不动；否则让用户选
+    const stillThere = personalProjects.find((item) => item.id === spaceProject.personal);
+    if (stillThere) {
+      await enterPersonalProject(stillThere);
+      return;
+    }
+    spaceItems = personalProjects;
+    setPersonalChoosing(true);
+    renderPersonalPicker({ empty: false });
+  }
+
+  /** 选项目 / 还没项目时的首屏。 */
+  function renderPersonalPicker({ empty }) {
+    const box = $("#personalSummary");
+    if (!box) return;
+    box.replaceChildren();
+
+    const head = el("div", "personal-summary-head");
+    const copy = el("div", "personal-summary-copy");
+    copy.append(
+      el("h2", "", "个人空间"),
+      el(
+        "p",
+        "personal-summary-note",
+        empty
+          ? "还没有项目。建一个项目，图片、标注任务和结果都会放进去。"
+          : "你有多个项目，选一个继续。"
+      )
+    );
+    head.append(copy);
+    box.append(head);
+
+    if (empty) {
+      const card = el("div", "project-picker-empty");
+      card.append(
+        el("span", "material-symbols-rounded project-picker-empty-icon", "create_new_folder"),
+        el("strong", "", "建第一个项目"),
+        el("p", "", "项目是图片和任务的分组，之后随时可以再加。")
+      );
+      const form = el("form", "project-picker-form");
+      const input = el("input", "project-picker-input");
+      input.type = "text";
+      input.maxLength = 40;
+      input.placeholder = "例如：街景数据 11 月";
+      input.setAttribute("aria-label", "新项目名称");
+      const submit = el("button", "primary-button", "创建项目");
+      submit.type = "submit";
+      form.append(input, submit);
+
+      const tip = el("p", "project-picker-tip");
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        submit.disabled = true;
+        tip.textContent = "";
+        try {
+          const created = await createPersonalProject(input.value);
+          await enterPersonalProject(created);
+        } catch (error) {
+          tip.textContent = error.message;
+        } finally {
+          submit.disabled = false;
+        }
+      });
+      card.append(form, tip);
+      box.append(card);
+      return;
+    }
+
+    const grid = el("div", "project-picker-grid");
+    box.append(grid);
+    personalProjects.forEach((project) => {
+      // 卡片改成 div 包两个按钮：左边进项目，右边删除。
+      // 原来整张卡是一个 <button>，里面塞不下第二个按钮，多项目就一直删不掉。
+      const card = el("div", "project-picker-card");
+      card.dataset.projectId = String(project.id);
+
+      const open = el("button", "project-picker-open");
+      open.type = "button";
+      const icon = el("span", "material-symbols-rounded project-picker-card-icon", "folder");
+      icon.setAttribute("aria-hidden", "true");
+      const body = el("span", "project-picker-card-body");
+      body.append(
+        el("strong", "", project.name || `项目 #${project.id}`),
+        el("small", "project-picker-card-meta", "正在读取…")
+      );
+      open.append(icon, body);
+      open.addEventListener("click", () => {
+        open.disabled = true;
+        enterPersonalProject(project).catch((error) => {
+          open.disabled = false;
+          status("#personalSummary", error.message, true);
+        });
+      });
+
+      const remove = el("button", "project-picker-delete");
+      remove.type = "button";
+      remove.title = "删除项目";
+      remove.setAttribute("aria-label", `删除项目 ${project.name || project.id}`);
+      remove.append(el("span", "material-symbols-rounded", "delete"));
+      remove.addEventListener("click", (event) => {
+        event.stopPropagation();
+        removeProject(project, { statusSelector: "#personalSummary" });
+      });
+
+      card.append(open, remove);
+      grid.append(card);
+
+      // 统计慢慢补，别为了数字卡住整页
+      call(() => sdk.projectStats(project.id))
+        .then((stats) => {
+          if (!stats) return;
+          body.lastChild.textContent = `${stats.images_total} 张图片 · ${stats.tasks_total} 个任务`;
+        })
+        .catch(() => {
+          body.lastChild.textContent = "打开看看";
+        });
+    });
+
+    const add = el("button", "project-picker-add", "新建项目");
+    add.type = "button";
+    add.addEventListener("click", async () => {
+      const name = window.prompt("新项目名称", "");
+      if (name === null) return;
+      add.disabled = true;
+      try {
+        const created = await createPersonalProject(name);
+        await enterPersonalProject(created);
+      } catch (error) {
+        status("#personalSummary", error.message, true);
+      } finally {
+        add.disabled = false;
+      }
+    });
+    box.append(add);
+  }
+
+  async function renderSummary(project) {
+    const box = $("#personalSummary");
+    if (!box) return;
+    box.replaceChildren();
+    if (!project) {
+      const empty = el("div", "empty-state project-empty");
+      empty.append(
+        el("strong", "", "还没有可用的工作区"),
+        el("p", "", "默认工作区没能创建成功。刷新一次试试，或让管理员帮你开通。")
+      );
+      box.append(empty);
+      return;
+    }
+
+    const head = el("div", "personal-summary-head");
+    const copy = el("div", "personal-summary-copy");
+    copy.append(
+      el("h2", "", "个人空间"),
+      el("p", "personal-summary-note", `当前项目：${project.name || "未命名"} · 图片、标注任务和结果都在这里`)
+    );
+    const upload = el("button", "primary-button", "上传图片");
+    upload.type = "button";
+    upload.addEventListener("click", () => $("#imageUpload")?.click());
+    if (personalProjects.length > 1) {
+      const back = el("button", "secondary-button", `切换项目 · ${project.name || "当前"}`);
+      back.type = "button";
+      back.addEventListener("click", () => {
+        spaceProject.personal = null;
+        setPersonalChoosing(true);
+        renderPersonalPicker({ empty: false });
+      });
+      head.append(copy, back, upload);
+    } else {
+      head.append(copy, upload);
+    }
+    box.append(head);
+
+    const stats = await call(() => sdk.projectStats(project.id)).catch(() => null);
+    const byStatus = stats?.tasks_by_status || {};
+    const cards = [
+      ["图片", stats ? stats.images_total : "—", "photo_library"],
+      ["任务", stats ? stats.tasks_total : "—", "task_alt"],
+      ["待复核", stats ? (byStatus.auto_annotated || 0) : "—", "fact_check"],
+      ["已通过", stats ? stats.approved_tasks : "—", "verified"],
+    ];
+    const row = el("div", "personal-stats");
+    cards.forEach(([label, value, icon]) => {
+      const card = el("div", "personal-stat");
+      const iconNode = el("span", "material-symbols-rounded personal-stat-icon", icon);
+      iconNode.setAttribute("aria-hidden", "true");
+      card.append(iconNode, el("strong", "", String(value)), el("small", "", label));
+      row.append(card);
+    });
+    box.append(row);
+  }
+
+  async function loadPersonalTasks(project) {
+    const box = $("#personalTaskList");
+    const section = $("#personalTasksSection");
+    if (!box || !section) return;
+    let tasks = [];
+    let projects = [];
+    try {
+      [tasks, projects] = await Promise.all([
+        call(() => sdk.myTasks({ role: "assignee", limit: 60 })).catch(() => []),
+        call(() => sdk.listVisibleProjects()).catch(() => []),
+      ]);
+    } catch {
+      tasks = [];
+    }
+    const projectMap = new Map((projects || []).map((item) => [item.id, item]));
+    // 只看还没结案的：已通过 / 已取消的任务留在项目页，不占个人空间的版面
+    const live = (tasks || []).filter((task) => !TERMINAL.has(task.status));
+    box.replaceChildren();
+    section.hidden = !live.length;
+    if (!live.length) return;
+
+    live.forEach((task) => {
+      // 行里要放真按钮（复核），所以不能用 <button> 当容器
+      const row = el("div", "personal-task-row");
+      row.tabIndex = 0;
+      row.setAttribute("role", "button");
+      const dot = el("span", `personal-task-dot is-${task.status}`);
+      const copy = el("span", "personal-task-copy");
+      const title = el("span", "personal-task-title");
+      title.append(el("strong", "", task.name || `任务 #${task.id}`));
+      title.append(el("em", `task-state is-${task.status}`, STATUS_LABEL[task.status] || task.status));
+      const where = projectMap.get(task.project_id);
+      const spaceName = where
+        ? (where.group_type === "personal" ? "个人空间" : where.group_name || "项目")
+        : "项目";
+      copy.append(
+        title,
+        el("small", "", `${spaceName} · 共 ${task.image_total || 0} 张 · 已标 ${task.image_annotated || 0} 张`)
+      );
+      row.append(dot, copy);
+
+      // 待复核的任务给一个直达复核台的按钮，其余状态点整行走原来的路径
+      const reviewable = task.status === "auto_annotated";
+      const actionLabel = reviewable ? "任务复核" : (task.mode === "manual" ? "去标注" : "查看");
+      if (reviewable) {
+        const reviewButton = el("button", "personal-task-action is-review", actionLabel);
+        reviewButton.type = "button";
+        reviewButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          openPersonalReview(task);
+        });
+        row.append(reviewButton);
+      } else {
+        row.append(el("span", "personal-task-go", actionLabel));
+      }
+
+      row.setAttribute("aria-label", `${task.name || `任务 #${task.id}`}，${actionLabel}`);
+      row.addEventListener("click", () => jumpToTask(task));
+      row.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        jumpToTask(task);
+      });
+      box.append(row);
+    });
+  }
+
+  /** 个人空间直接开任务复核台，裁完回来刷新统计和列表。 */
+  function openPersonalReview(task) {
+    if (!window.VSTaskReview) {
+      status("#personalTaskList", "复核面板没有加载，刷新页面后再试", true);
+      return;
+    }
+    window.VSTaskReview.open({
+      projectId: task.project_id,
+      taskId: task.id,
+      onDone: (decision) => {
+        const message = decision === "approve" ? "任务已通过复核。" : "已退回，等标注员处理。";
+        status("#imageStatus", message);
+        refreshPersonal();
+      },
+    });
+  }
+
+  async function jumpToTask(task) {
+    try {
+      // 人工任务直接开标注台：个人空间里点一下就能画框，不用先跳项目页再找入口
+      if (task.mode === "manual" && window.VSAnnotate) {
+        const detail = await call(() => sdk.getTask(task.project_id, task.id));
+        const rows = detail.images || [];
+        const next = rows.find((row) => row.annotation_status !== "annotated") || rows[0];
+        if (next) {
+          window.VSAnnotate.open({
+            projectId: task.project_id,
+            taskId: task.id,
+            taskImageId: next.id,
+          });
+          return;
+        }
+      }
+      const all = await call(() => sdk.listVisibleProjects());
+      const project = all.find((item) => item.id === task.project_id);
+      if (!project) {
+        status("#personalTaskList", "找不到这个任务所在的项目", true);
+        return;
+      }
+      await openProject(project, { tab: "tasks" });
+    } catch (error) {
+      status("#personalTaskList", error.message, true);
+    }
   }
 
   async function loadTeam() {
@@ -98,12 +520,11 @@
     teamGroupId = Number(select.value) || null;
     if (!teamGroupId) {
       spaceItems = [];
-      $("#newTeamProject").disabled = true;
       renderList("team", []);
       return;
     }
-    $("#newTeamProject").disabled = false;
-    spaceItems = await call(() => sdk.listVisibleProjects({ groupId: teamGroupId }));
+    const project = await ensureSpaceProject("team", teamGroupId);
+    spaceItems = project ? [project] : [];
     renderList("team", spaceItems);
   }
 
@@ -116,14 +537,11 @@
     enterpriseGroupId = selected ? selected.group_id : null;
     if (!enterpriseGroupId) {
       spaceItems = [];
-      $("#newEnterpriseProject").disabled = true;
       renderList("enterprise", []);
       return;
     }
-    $("#newEnterpriseProject").disabled = false;
-    spaceItems = await call(() =>
-      sdk.listVisibleProjects({ groupId: enterpriseGroupId })
-    );
+    const project = await ensureSpaceProject("enterprise", enterpriseGroupId);
+    spaceItems = project ? [project] : [];
     renderList("enterprise", spaceItems);
   }
 
@@ -137,10 +555,13 @@
   function renderList(kind, items) {
     const box = $(`#${kind}ProjectList`);
     if (!box) return;
+    const noSpace = (kind === "team" && !teamGroupId)
+      || (kind === "enterprise" && !enterpriseGroupId);
+    // 还没有小组 / 企业时整节「项目」都不出现，否则页面上下两个空状态在说同一件事
+    const section = $(`#${kind}ProjectSection`);
+    if (section) section.hidden = noSpace;
     box.replaceChildren();
     if (!items.length) {
-      const noSpace = (kind === "team" && !teamGroupId)
-        || (kind === "enterprise" && !enterpriseGroupId);
       const empty = el("div", "empty-state project-empty");
       empty.append(
         el("strong", "", noSpace
@@ -148,7 +569,7 @@
           : "还没有项目"),
         el("p", "", noSpace
           ? (kind === "team"
-            ? "点右上角「⋯」→「空间设置」，在里面新建小组。"
+            ? "点右上角「新建小组」开始，建好后就能一起攒成果。"
             : "点右上角「⋯」→「创建企业」，或凭企业码加入。")
           : "项目是图片、任务和成员的容器。点右上角「新建项目」开始。")
       );
@@ -191,13 +612,15 @@
 
   /* ---------------- 项目页 ---------------- */
 
-  async function openProject(project) {
+  async function openProject(project, { tab: wanted = "overview" } = {}) {
     current = project;
-    tab = "overview";
+    tab = wanted;
     loaded.overview = loaded.tasks = loaded.members = loaded.categories = loaded.settings = false;
     // 换项目要重置列表态，否则会带着上个项目的筛选与成员缓存
     taskFilter = "";
     taskMine = false;
+    taskPollCount = 0;
+    stopTaskPoll();
     memberMap = null;
     memberRows = null;
     taskPickImages = [];
@@ -217,6 +640,13 @@
     $("#projectRole").hidden = false;
     $("#projectArchive").hidden = !project.can_manage || project.status !== "active";
     $("#projectDangerArchive").disabled = !project.can_manage;
+    // 删除只在个人空间开放：小组 / 企业项目删掉会连累别人的数据，那边只给归档
+    const deletePanel = $("#projectDeletePanel");
+    if (deletePanel) {
+      deletePanel.hidden = !(
+        project.can_manage && project.status === "active" && labelOf(project) === "personal"
+      );
+    }
 
     // 项目可能不属于当前停留的空间（通知里点开别的空间的任务就是这种情况），
     // 先对齐空间，否则侧栏高亮和「← 返回空间」会指向错误的地方。
@@ -224,10 +654,8 @@
 
     showView("project");
     syncTabs();
-    await loadOverview();
-
-    // 图像 tab 直接复用 app.js 的上传 / 列表
-    window.VSApp?.loadProject?.(project);
+    if (tab === "tasks") await loadTasks();
+    else await loadOverview();
   }
 
   function labelOf(project) {
@@ -272,7 +700,7 @@
     if (!strip) return;
     const steps = [];
     if (!stats.images_total) {
-      steps.push({ label: "上传第一批图片", hint: "图片是任务的原料，先传几张。", action: () => switchTab("images") });
+      steps.push({ label: "去空间首页上传图片", hint: "图片统一在空间首页上传，这里只做任务与复核。", action: () => showView(activeSpace) });
     }
     if (!categories.length) {
       steps.push({ label: "添加识别类目", hint: "自动标注靠它出框，人工标注也从这里取色板。", action: () => switchTab("categories") });
@@ -383,6 +811,37 @@
     if (!node) return;
     node.classList.toggle("is-on", taskMine);
     node.setAttribute("aria-pressed", taskMine ? "true" : "false");
+  }
+
+  // 任务状态只在「排队 / 分析中」时才有必要盯；跑完就停，不留一个永远转的定时器。
+  // 以前这里完全不自刷新，用户点进来看到的一直是打开那一刻的旧状态。
+  const TASK_POLL_MS = 4000;
+  const TASK_POLL_LIMIT = 90;
+  let taskPollTimer = 0;
+  let taskPollCount = 0;
+
+  function stopTaskPoll() {
+    if (taskPollTimer) window.clearTimeout(taskPollTimer);
+    taskPollTimer = 0;
+  }
+
+  function scheduleTaskPoll(tasks) {
+    stopTaskPoll();
+    const running = (tasks || []).filter((t) => t.status === "queued" || t.status === "auto_annotating");
+    if (!running.length) { taskPollCount = 0; return; }
+    if (taskPollCount >= TASK_POLL_LIMIT) return;
+    taskPollTimer = window.setTimeout(async () => {
+      taskPollTimer = 0;
+      // 用户已经切走就别在后台一直请求
+      if (currentView !== "project" || tab !== "tasks") { taskPollCount = 0; return; }
+      taskPollCount += 1;
+      try {
+        await loadTasks();
+      } catch {
+        // 网络抖一下不该让刷新链断掉，下一轮接着试（有 TASK_POLL_LIMIT 兜底）
+        scheduleTaskPoll(running);
+      }
+    }, TASK_POLL_MS);
   }
 
   async function loadTasks() {
@@ -505,6 +964,7 @@
       row.append(actions);
       box.append(row);
     });
+    scheduleTaskPoll(visible);
   }
 
   /**
@@ -1099,25 +1559,28 @@
     });
   });
   $("#projectDangerArchive").addEventListener("click", archiveProject);
+  $("#projectDangerDelete").addEventListener("click", async () => {
+    if (!current) return;
+    await removeProject(current, { statusSelector: "#projectSettingsStatus" });
+    // 项目已经没了，回个人空间的选择 / 新建那一屏
+    if (activeSpace === "personal") showView("personal");
+  });
   $("#projectArchive").addEventListener("click", archiveProject);
 
-  $("#newPersonalProject").addEventListener("click", openCreate);
-  $("#newTeamProject").addEventListener("click", openCreate);
-  $("#newEnterpriseProject").addEventListener("click", openCreate);
+  // 不再有「新建项目」：每个空间进入时自动准备一个默认工作区
   $("#projectCreateForm").addEventListener("submit", submitCreate);
   $("#closeProjectCreate").addEventListener("click", () => closeDialog($("#projectCreateDialog")));
 
-  bindSpaceMenu("#teamSpaceMenu", "#teamSpaceMenuList");
-  bindSpaceMenu("#enterpriseSpaceMenu", "#enterpriseSpaceMenuList");
+  // 设置入口：小组走 header 的齿轮，企业走左栏企业卡右上角的齿轮，都不再套「更多」菜单
   $("#teamSpaceSettings").addEventListener("click", () => openDrawer("team"));
-  $("#enterpriseSpaceSettings").addEventListener("click", () => openDrawer("enterprise"));  $("#spaceDrawerClose").addEventListener("click", closeDrawer);
+  $("#spaceDrawerClose").addEventListener("click", closeDrawer);
   $("#spaceDrawerScrim").addEventListener("click", closeDrawer);
 
   $("#teamSelect").addEventListener("change", async () => {
     teamGroupId = Number($("#teamSelect").value) || null;
     if (!teamGroupId) return;
-    $("#newTeamProject").disabled = false;
-    spaceItems = await call(() => sdk.listVisibleProjects({ groupId: teamGroupId }));
+    const project = await ensureSpaceProject("team", teamGroupId);
+    spaceItems = project ? [project] : [];
     renderList("team", spaceItems);
   });
   $("#enterpriseSelect").addEventListener("change", async () => {
@@ -1126,10 +1589,8 @@
     );
     enterpriseGroupId = ent ? ent.group_id : null;
     if (!enterpriseGroupId) return;
-    $("#newEnterpriseProject").disabled = false;
-    spaceItems = await call(() =>
-      sdk.listVisibleProjects({ groupId: enterpriseGroupId })
-    );
+    const project = await ensureSpaceProject("enterprise", enterpriseGroupId);
+    spaceItems = project ? [project] : [];
     renderList("enterprise", spaceItems);
   });
 
@@ -1139,6 +1600,13 @@
     activeSpace: () => activeSpace,
     open: openProject,
     closeDrawer,
+    /** 上传流程要用：拿到某个空间的默认工作区（没有就建一个）。 */
+    ensureProjectFor: (kind, groupId) => ensureSpaceProject(kind, groupId),
+    /** 上传完成后刷新个人空间的总结与「我的任务」。 */
+    refreshPersonal: () => {
+      if (activeSpace !== "personal") return Promise.resolve();
+      return loadPersonal().catch(() => {});
+    },
     /** 切栏目时把「更多」菜单收起，免得它挂在新页面边上 */
     closeMenus: closeSpaceMenus,
     /** 标注工作台保存 / 结束任务后回来，让任务列表跟上最新状态。 */
@@ -1151,7 +1619,7 @@
 
   // 首屏默认停在个人空间；app.js 启动时 projects.js 还没加载，这里补一次
   enterSpace("personal").catch((error) => {
-    const box = $("#personalProjectList");
+    const box = $("#personalSummary");
     if (box) box.replaceChildren(el("div", "empty-state project-empty", error.message));
   });
 })();

@@ -56,6 +56,20 @@
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 
+  function fmtSpan(seconds) {
+    if (seconds == null || Number.isNaN(Number(seconds))) return "—";
+    const value = Math.max(0, Math.round(Number(seconds)));
+    if (value < 60) return `${value} 秒`;
+    if (value < 3600) return `${Math.round(value / 60)} 分钟`;
+    return `${(value / 3600).toFixed(1)} 小时`;
+  }
+
+  function modelRunState(model) {
+    if (!model.detector_loaded) return "未载入（有标注任务时才加载）";
+    if (model.idle_for_seconds == null) return "检测模型已载入";
+    return `检测模型已载入 · 已空闲 ${fmtSpan(model.idle_for_seconds)}`;
+  }
+
   function flag(text, on) {
     return el("span", `admin-flag ${on ? "is-on" : "is-off"}`, text);
   }
@@ -211,7 +225,13 @@
         model.translator_configured ? model.effective_translator_dir || "已配置" : "未配置",
         model.translator_configured ? "" : "is-warn"
       ),
-      fact("运行状态", model.detector_loaded ? "检测模型已载入" : "尚未载入（首次使用时加载）"),
+      fact("运行状态", modelRunState(model)),
+      fact(
+        "内存策略",
+        model.idle_release_seconds > 0
+          ? `空闲 ${fmtSpan(model.idle_release_seconds)}后自动释放`
+          : "常驻内存，不自动释放"
+      ),
     ];
   }
 
