@@ -68,7 +68,7 @@
   let heartbeatTimer = 0;
   let entering = false;
 
-  const thumbUrls = new Map();   // image.id → objectURL
+  const thumbUrls = new Map();   // image.image_id → objectURL
 
   const roleOf = () => (current && current.my_role) || null;
   const rank = (role) => (role == null ? -1 : 4 - ROLE_ORDER[role]);
@@ -94,17 +94,19 @@
     return ent ? `ENT-${ent.id}` : "—";
   }
 
+  // 企业图的 id 是关联行 id，取图要用它指向的 Image id
   function thumbFor(image, node) {
     if (!image || !node) return;
-    const cached = thumbUrls.get(image.id);
+    const key = image.image_id;
+    const cached = thumbUrls.get(key);
     if (cached) {
       node.src = cached;
       return;
     }
-    call(() => sdk.imageContent(image.id))
+    call(() => sdk.imageContent(key))
       .then(({ blob }) => {
         const url = URL.createObjectURL(blob);
-        thumbUrls.set(image.id, url);
+        thumbUrls.set(key, url);
         if (node.isConnected) node.src = url;
       })
       .catch(() => {
@@ -201,7 +203,7 @@
       showEmpty(
         unsupported ? "当前后端还没有企业接口" : "企业数据读取失败",
         unsupported
-          ? "企业空间需要后端提供 /enterprises 一组接口。真实后端（10.11.82.221）尚未部署，先用本地虚拟后端查看完整效果。"
+          ? "当前连接的后端没有企业接口，可能是版本过旧。"
           : text
       );
       return;
@@ -278,7 +280,8 @@
   async function loadImages() {
     if (!entId()) return;
     try {
-      images = (await call(() => sdk.listEnterpriseImages(entId()))) || [];
+      const page = await call(() => sdk.listEnterpriseImages(entId(), { limit: 200 }));
+      images = (page && page.items) || [];
     } catch {
       images = [];
     }
@@ -295,7 +298,8 @@
 
   async function loadLogs() {
     if (!entId()) return;
-    logs = (await call(() => sdk.listEnterpriseLogs(entId()))) || [];
+    const page = await call(() => sdk.listEnterpriseLogs(entId(), { limit: 100 }));
+    logs = (page && page.items) || [];
   }
 
   async function loadReport() {
@@ -323,11 +327,60 @@
     renderQuota();
     renderNotice();
     renderMembers();
+    renderSpacePeople();
     renderResults();
     renderReview();
     renderLogs();
     renderReport();
     renderTabs();
+  }
+
+  // 空间页首屏的成员预览。头像上不叠头衔角标（第 17 项），头衔跟在名字后面。
+  function renderSpacePeople() {
+    const box = $("#enterprisePeople");
+    if (!box) return;
+    // 成果回到页面后，左栏信息卡里已经有完整成员列表，这条横条就是重复一遍
+    if (grid && !grid.hidden) {
+      box.hidden = true;
+      box.replaceChildren();
+      return;
+    }
+    if (!members.length) {
+      box.hidden = true;
+      box.replaceChildren();
+      return;
+    }
+    box.hidden = false;
+
+    const head = el("div", "space-people-head");
+    const title = el("strong", "", "成员");
+    title.append(el("b", "", String(members.length)));
+    head.append(title);
+    if (canStaff()) {
+      const manage = el("button", "text-button", "管理成员");
+      manage.type = "button";
+      manage.addEventListener("click", () => manageBtn?.click());
+      head.append(manage);
+    }
+
+    const sorted = members
+      .slice()
+      .sort((a, b) => (ROLE_ORDER[a.role] - ROLE_ORDER[b.role]) || (b.upload_count - a.upload_count));
+
+    const row = el("div", "space-people-row");
+    sorted.slice(0, 8).forEach((member) => {
+      const account = member.account || { username: `user_${member.account_id}` };
+      const roleLabel = ROLE_LABEL[member.role] || member.role;
+      const chip = el("span", "space-person");
+      if (member.account_id === me?.id) chip.classList.add("is-me");
+      if (member.online) chip.append(el("span", "presence-dot is-online"));
+      chip.append(avatarNode(account, 26), el("small", "", displayName(account)));
+      if (member.role !== "member") chip.append(el("em", `role-tag role-${member.role}`, roleLabel));
+      chip.title = `${displayName(account)} · ${roleLabel}${member.online ? " · 在线" : ""}`;
+      row.append(chip);
+    });
+    if (members.length > 8) row.append(el("span", "space-person-more", `还有 ${members.length - 8} 人`));
+    box.replaceChildren(head, row);
   }
 
   function renderHead() {
@@ -363,7 +416,7 @@
   }
 
   function renderNotice() {
-    const text = (current && current.notice && current.notice.text) || "";
+    const text = (current && current.notice_text) || "";
     noticeBox.hidden = !text;
     noticeText.textContent = text;
   }
@@ -518,7 +571,7 @@
         // 详情页那个删除按钮走的是个人图端点，点下去只会 404，所以这里不给它。
         window.VSApp?.openImageDetail(image, {
           source: "enterprise",
-          analysisImageId: Number(image.id),
+          analysisImageId: Number(image.image_id),
           canDelete: false,
         });
       });
@@ -568,7 +621,7 @@
       note.type = "button";
       pass.addEventListener("click", () => decide(image, "approve", pass));
       drop.addEventListener("click", () => decide(image, "reject", drop));
-      note.addEventListener("click", () => window.VSApp?.openImageDetail(image, { source: "enterprise", analysisImageId: Number(image.id), canDelete: false }));
+      note.addEventListener("click", () => window.VSApp?.openImageDetail(image, { source: "enterprise", analysisImageId: Number(image.image_id), canDelete: false }));
       actions.append(note, drop, pass);
       row.append(thumb, copy, actions);
       reviewPane.append(row);
@@ -579,7 +632,7 @@
   async function decide(image, decision, button) {
     if (button) button.disabled = true;
     try {
-      await call(() => sdk.reviewEnterpriseImage(entId(), image.id, decision));
+      await call(() => sdk.reviewEnterpriseImage(entId(), image.image_id, decision));
       await refreshAfterChange();
     } catch (error) {
       status("#entResultsMeta", error.message, true);
@@ -769,7 +822,15 @@
     }
   });
 
-  uploadBtn.addEventListener("click", () => uploadInput.click());
+  // 企业上传同样转到个人空间的上传区：一次选好「自动 / 人工 + 指派给谁」，
+  // 分析结果留在企业图库里，不用再回图像数据页重传一遍。
+  uploadBtn.addEventListener("click", () => {
+    if (window.VSApp?.startUpload && current?.id) {
+      window.VSApp.startUpload("enterprise", current.id);
+      return;
+    }
+    uploadInput.click();
+  });
   uploadInput.addEventListener("change", async () => {
     const files = [...uploadInput.files];
     uploadInput.value = "";
@@ -861,7 +922,7 @@
     $("#entQuotaMembersInput").value = String(current.quota_members || 0);
     $("#entAutoApprove").checked = !!current.auto_approve_staff;
     $("#entOpenJoin").checked = current.join_mode === "open";
-    $("#entNoticeInput").value = (current.notice && current.notice.text) || "";
+    $("#entNoticeInput").value = current.notice_text || "";
     status("#entNoticeStatus", "");
     status("#entQuotaStatus", "");
 
@@ -974,7 +1035,7 @@
     event.preventDefault();
     const button = $("#saveEntNotice");
     runForm(button, "#entNoticeStatus", async () => {
-      await call(() => sdk.setEnterpriseNotice(entId(), $("#entNoticeInput").value.trim()));
+      await call(() => sdk.updateEnterprise(entId(), { notice_text: $("#entNoticeInput").value.trim() || null }));
       await refreshAfterChange();
       status("#entNoticeStatus", "已发布");
     });

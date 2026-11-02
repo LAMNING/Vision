@@ -4,16 +4,17 @@
 // 后端调用一律走 VS.sdk，本文件不出现 fetch。
 
 const { sdk, call } = VS;
+const el = VS.el;
 
 // 页面一次可暂存 50 张；后端项目上传接口每次接收 20 张，确认时自动分批。
 const MAX_BATCH_FILES = 50;
 const API_BATCH_FILES = 20;
-const IMAGE_PROJECT_NAME = "图像数据";
 
 const imageUpload = document.querySelector("#imageUpload");
 const imageDataState = document.querySelector("#imageDataState");
-const uploadZone = document.querySelector(".upload-zone");
-const uploadFeedback = document.querySelector("#uploadFeedback");
+// 拖拽上传挂到整个列表区：原来的 .upload-zone 已经被纯文件表取代
+const uploadZone = document.querySelector(".personal-data");
+const uploadFeedback = document.querySelector("#imageStatus");
 const selectionPanel = document.querySelector("#selectionPanel");
 const selectionTitle = document.querySelector("#selectionTitle");
 const selectedFileList = document.querySelector("#selectedFileList");
@@ -21,6 +22,12 @@ const selectionSummary = document.querySelector("#selectionSummary");
 const analysisTargets = document.querySelector("#analysisTargets");
 const confirmAnalysis = document.querySelector("#confirmAnalysis");
 const clearSelection = document.querySelector("#clearSelection");
+// 上传前的三个选项：标注方式 / 目标空间 / 指派给谁
+const uploadMode = document.querySelector("#uploadMode");
+const uploadSpace = document.querySelector("#uploadSpace");
+const uploadAssigneeWrap = document.querySelector("#uploadAssigneeWrap");
+const uploadAssignee = document.querySelector("#uploadAssignee");
+const uploadOptionsHint = document.querySelector("#uploadOptionsHint");
 const uploadToast = document.querySelector("#uploadToast");
 const uploadToastTitle = document.querySelector("#uploadToastTitle");
 const uploadToastDetail = document.querySelector("#uploadToastDetail");
@@ -33,17 +40,16 @@ const detailTitle = document.querySelector("#detailTitle");
 const detailDimensions = document.querySelector("#detailDimensions");
 const detailSize = document.querySelector("#detailSize");
 const detailAnalysis = document.querySelector("#detailAnalysis");
+const detailAnnotate = document.querySelector("#detailAnnotate");
+const detailReview = document.querySelector("#detailReview");
 const deleteImageButton = document.querySelector("#deleteImageButton");
 const sendToGroup = document.querySelector("#sendToGroup");
 const backToImages = document.querySelector("#backToImages");
-const railUpload = document.querySelector("#railUpload");
-const railData = document.querySelector("#railData");
+const railSpace = document.querySelector("#railSpace");
 const railTeam = document.querySelector("#railTeam");
 const railEnterprise = document.querySelector("#railEnterprise");
+const railAdmin = document.querySelector("#railAdmin");
 const railProfile = document.querySelector("#railProfile");
-const backToUpload = document.querySelector("#backToUpload");
-const profileDialog = document.querySelector("#profileDialog");
-const closeProfileDialog = document.querySelector("#closeProfileDialog");
 const dangerDialog = document.querySelector("#dangerDialog");
 const dangerKicker = document.querySelector("#dangerKicker");
 const dangerTitle = document.querySelector("#dangerTitle");
@@ -57,9 +63,31 @@ const openTargetSettings = document.querySelector("#openTargetSettings");
 const targetSettingsDialog = document.querySelector("#targetSettingsDialog");
 const closeTargetSettings = document.querySelector("#closeTargetSettings");
 const targetSettingsForm = document.querySelector("#targetSettingsForm");
-const projectTargets = document.querySelector("#projectTargets");
 const projectTargetsStatus = document.querySelector("#projectTargetsStatus");
 const saveProjectTargets = document.querySelector("#saveProjectTargets");
+const targetRows = document.querySelector("#targetRows");
+const targetEmpty = document.querySelector("#targetEmpty");
+const targetNewZh = document.querySelector("#targetNewZh");
+const targetNewEn = document.querySelector("#targetNewEn");
+const targetAddButton = document.querySelector("#targetAddButton");
+const projectBoxThreshold = document.querySelector("#projectBoxThreshold");
+const projectBoxThresholdValue = document.querySelector("#projectBoxThresholdValue");
+
+// 与后端 DEFAULT_BOX_THRESHOLD 保持一致；滑块上的值永远以读回来的配置为准。
+const FALLBACK_BOX_THRESHOLD = 0.3;
+let currentBoxThreshold = FALLBACK_BOX_THRESHOLD;
+
+function formatThreshold(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(2) : FALLBACK_BOX_THRESHOLD.toFixed(2);
+}
+
+function setBoxThreshold(value) {
+  currentBoxThreshold = Number(value);
+  const text = formatThreshold(value);
+  if (projectBoxThreshold) projectBoxThreshold.value = text;
+  if (projectBoxThresholdValue) projectBoxThresholdValue.textContent = text;
+}
 
 const utilityRail = document.querySelector(".utility-rail");
 const logoutChip = document.querySelector("#railLogout");
@@ -67,6 +95,13 @@ const confirmLogout = document.querySelector("#confirmLogout");
 const appAccount = document.querySelector("#appAccount");
 const appAvatar = document.querySelector("#appAvatar");
 const appAccountName = document.querySelector("#appAccountName");
+// 顶栏的上下文区：栏目名 / 项目名 / 返回按钮 / 项目角色与归档
+const appBar = document.querySelector(".app-bar");
+const appContextKicker = document.querySelector("#appContextKicker");
+const appContextTitle = document.querySelector("#appContextTitle");
+const projectBack = document.querySelector("#projectBack");
+const projectRole = document.querySelector("#projectRole");
+const projectArchive = document.querySelector("#projectArchive");
 const railSettings = document.querySelector("#railSettings");
 const settingsDialog = document.querySelector("#settingsDialog");
 const closeSettingsDialog = document.querySelector("#closeSettingsDialog");
@@ -76,22 +111,23 @@ const selectAllImages = document.querySelector("#selectAllImages");
 const selectionCount = document.querySelector("#selectionCount");
 const downloadSelected = document.querySelector("#downloadSelected");
 const downloadAnnotated = document.querySelector("#downloadAnnotated");
-const classicRecentState = document.querySelector("#classicRecentState");
-const classicViewAll = document.querySelector("#classicViewAll");
-const classicAnalyzingCount = document.querySelector("#classicAnalyzingCount");
-const classicCompletedCount = document.querySelector("#classicCompletedCount");
-const classicWaitingCount = document.querySelector("#classicWaitingCount");
+const removeSelected = document.querySelector("#removeSelected");
+const projectImagesMeta = document.querySelector("#projectImagesMeta");
+const projectImageFilter = document.querySelector("#projectImageFilter");
+const projectImageUpload = document.querySelector("#projectImageUpload");
 
 const allDialogs = [...document.querySelectorAll(".dialog-backdrop")];
 
-let currentView = "workspace";
+let currentView = "personal";
 let previewUrl = null;
 let currentImage = null;
 let currentImageContext = { source: "personal", analysisImageId: null, canDelete: true };
 let thumbnailUrls = [];
 let selectedFiles = [];
 let selectionPreviewUrls = [];
-let imageProjectPromise = null;
+let activeProject = null;
+// 登录账号：顶栏 `VS.probe()` 拿到后缓存在这里，图片详情拿它判断「是不是我上传的」
+let activeAccount = null;
 let loadedImages = [];
 let imageLoadPromise = null;
 let imagesLoaded = false;
@@ -122,6 +158,7 @@ loadProjectTargets();
 function setAccountBadge(account) {
   const fallback = localStorage.getItem("vision_account_name");
   const view = account || { username: fallback || "参赛成员" };
+  if (account) activeAccount = account;
   appAccountName.textContent = VS.displayName(view);
   VS.fillAvatar(appAvatar, account);
 }
@@ -129,34 +166,56 @@ function setAccountBadge(account) {
 // 探测后端能力（头像 / 展示名称 / 小组介绍是否支持），
 // 顺便把顶栏的账号信息填上，避免多打一次 /auth/me。
 VS.probe()
-  .then(({ me }) => { if (me) setAccountBadge(me); })
+  .then(({ me }) => {
+    if (!me) return;
+    setAccountBadge(me);
+    // 平台管理入口只给管理员；admin.js 里还会再校验一次
+    railAdmin.hidden = me.platform_role !== "admin";
+    // 新账号首次进入时走一遍新手引导（每个账号只出现一次）
+    window.VSGuide?.maybeStart?.(me);
+  })
   .catch(() => {});
 
 /* ---------------- 企业标识：Logo 右侧分隔栏 + 头像徽章 ---------------- */
 
-// 徽章本身是 CSS 画的（html.has-enterprise 时给头像右下角加 V），
+// 徽章不再是叠在头像上的角标（见 styles.css），改成名字后面的「企业」小标签，
 // 这里只负责「有没有企业身份」和分隔栏文案。
 const brandEnterprise = document.querySelector("#brandEnterprise");
 const brandEntName = document.querySelector("#brandEntName");
-const brandEntId = document.querySelector("#brandEntId");
+const appEntTag = document.querySelector("#appEntTag");
 
-function setEnterpriseBrand(ent) {
-  const on = !!(ent && ent.name);
-  document.documentElement.classList.toggle("has-enterprise", on);
-  brandEnterprise.hidden = !on;
-  if (!on) {
-    brandEntName.textContent = "—";
-    brandEntId.textContent = "—";
-    return;
-  }
-  brandEntName.textContent = ent.name;
-  brandEntId.textContent = `ENT-${ent.id}`;
-  brandEnterprise.title = `${ent.name} · 企业 ID ENT-${ent.id}（${ent.my_role || "成员"}）`;
+// 最近一次拿到的企业身份。徽标回答的是「你在哪个企业里」，
+// 所以个人 / 小组 / 平台管理页都不该露出它（以前它会一路跟到平台管理页）。
+let enterpriseBrand = null;
+
+function enterpriseSpaceActive() {
+  if (currentView === "enterprise") return true;
+  if (currentView === "project") return window.VSProjects?.activeSpace?.() === "enterprise";
+  return false;
 }
 
-window.VSBrand = { setEnterprise: setEnterpriseBrand };
+function syncEnterpriseBrand() {
+  const known = !!(enterpriseBrand && enterpriseBrand.name);
+  document.documentElement.classList.toggle("has-enterprise", known);
+  if (appEntTag) appEntTag.hidden = !known;
+  brandEnterprise.hidden = !known || !enterpriseSpaceActive();
+}
 
-appAccount.addEventListener("click", () => openDialog(profileDialog));
+function setEnterpriseBrand(ent) {
+  enterpriseBrand = ent && ent.name ? ent : null;
+  if (!enterpriseBrand) {
+    brandEntName.textContent = "—";
+  } else {
+    brandEntName.textContent = enterpriseBrand.name;
+    // 编号只在右上角的企业切换器上出现一次就够，顶栏不重复挂 ENT-x
+    brandEnterprise.title = `${enterpriseBrand.name} · 企业 ID ENT-${enterpriseBrand.id}（${enterpriseBrand.my_role || "成员"}）`;
+  }
+  syncEnterpriseBrand();
+}
+
+window.VSBrand = { setEnterprise: setEnterpriseBrand, sync: syncEnterpriseBrand };
+
+appAccount.addEventListener("click", () => openSettings("profile"));
 setAccountBadge(null);
 
 /* ---------------- 工具轨：悬停 0.8 秒展开，离开 300ms 收起 ---------------- */
@@ -198,45 +257,79 @@ utilityRail.addEventListener("focusout", collapseRail);
 
 // 工具轨高亮集中在一处算，避免每个入口各自 toggle 一遍、状态互相打架
 function syncRail() {
-  railUpload.classList.toggle("is-active", currentView === "workspace");
-  railData.classList.toggle("is-active", currentView === "images");
-  railTeam.classList.toggle("is-active", currentView === "team");
-  railEnterprise.classList.toggle("is-active", currentView === "enterprise");
-  railProfile.classList.toggle("is-active", !profileDialog.hidden);
+  // 项目页归属它来自的空间，侧栏高亮跟着走
+  const space = currentView === "project" ? window.VSProjects?.activeSpace() : currentView;
+  railSpace.classList.toggle("is-active", space === "personal");
+  railTeam.classList.toggle("is-active", space === "team");
+  railEnterprise.classList.toggle("is-active", space === "enterprise");
+  railAdmin.classList.toggle("is-active", currentView === "admin");
+  // 「个人与账号」和「设置」打开的是同一个弹窗，高亮统一记在「设置」上
   railSettings.classList.toggle("is-active", !settingsDialog.hidden);
 }
 
+// 每个栏目在顶栏的标题；项目页由 projects.js 自己写（要带项目名与描述）
+const VIEW_CONTEXT = {
+  personal: { kicker: "PERSONAL SPACE", title: "个人空间" },
+  team: { kicker: "TEAM SPACE", title: "小组空间" },
+  enterprise: { kicker: "ENTERPRISE SPACE", title: "企业空间" },
+  admin: { kicker: "PLATFORM ADMIN", title: "平台管理" },
+};
+
+// 顶栏只放栏目名 / 项目名：项目描述按需求不进顶栏，留在项目「设置」里编辑。
+function setAppContext({ kicker, title } = {}) {
+  if (kicker !== undefined) appContextKicker.textContent = kicker;
+  if (title !== undefined) appContextTitle.textContent = title;
+}
+
 function showView(view) {
+  // 换栏目时页面还停在上一页的滚动位置，新品种类的第一屏往往就是「一片空白」，
+  // 看起来像点了没反应。只在真的换了栏目时回到顶部，同一栏目的重新渲染不动滚动。
+  const viewChanged = currentView !== view;
   currentView = view;
-  // 图片详情是盖在内容区上面的独立层。不先收掉它，点工具轨切栏目时
-  // 内容区仍是 hidden，看起来就是"点了没反应"。
+  // 图片详情和标注工作台都是盖在内容区上面的独立层。不先收掉它们，
+  // 点工具轨切栏目时内容区仍是 hidden，看起来就是"点了没反应"。
   if (!detailView.hidden) closeImageDetail(true);
+  window.VSAnnotate?.close?.(true);
+  window.VSTaskReview?.close?.(true);
   allDialogs.forEach((dialog) => {
     if (!dialog.hidden) closeDialog(dialog);
   });
   document.querySelectorAll(".app-view").forEach((item) => {
     item.hidden = item.dataset.view !== view;
   });
-  // 小组页与企业页都是多栏布局，需要比上传页更宽的画布
-  content.classList.toggle("is-wide", view === "team" || view === "enterprise");
-  syncRail();
-  if (view === "images") {
-    loadImages({ force: false }).catch((error) => showStatus("暂时无法读取图像数据", error.message));
+  // 顶栏：空间栏目显示自己的名字；项目页的标题 / 角色 / 归档由 projects.js 写好，这里只管显示与否
+  const context = VIEW_CONTEXT[view];
+  if (context) {
+    setAppContext({ ...context });
+    projectRole.hidden = true;
+    projectArchive.hidden = true;
+    document.title = `${context.title} · Vision Studio`;
+  } else if (view === "project") {
+    document.title = `${appContextTitle.textContent} · Vision Studio`;
   }
-  if (view === "team" && window.VSTeam) window.VSTeam.enter();
-  if (view === "enterprise" && window.VSTeamEnterprise) window.VSTeamEnterprise.enter();
-  // 离开企业页就停心跳，别在后台一直发请求
-  if (view !== "enterprise" && window.VSTeamEnterprise) window.VSTeamEnterprise.leave();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  projectBack.hidden = view !== "project";
+  // 空间页与项目页都是多栏布局，需要比首页更宽的画布
+  const wide = ["team", "enterprise", "admin", "project"].includes(view);
+  content.classList.toggle("is-wide", wide);
+  appBar.classList.toggle("is-wide", wide);
+  syncRail();
+  // 切栏目时收起空间设置抽屉，免得它盖在新页面上
+  window.VSProjects?.closeDrawer?.();
+  window.VSProjects?.closeMenus?.();
+  if (view === "personal") window.VSProjects?.enter("personal");
+  if (view === "team") window.VSProjects?.enter("team");
+  if (view === "enterprise") window.VSProjects?.enter("enterprise");
+  if (view === "admin" && window.VSAdmin) window.VSAdmin.enter();
+  // 企业徽标只在企业空间（以及企业里的项目页）出现，切到别的栏目就收掉
+  syncEnterpriseBrand();
+  // 要「立刻」回到顶部：smooth 会跟页面里同时发生的尺寸变化打架，中途被顶掉，
+  // 结果就是用户点了菜单却停在旧的滚动位置。同一栏目就别动滚动。
+  if (viewChanged) window.scrollTo({ top: 0, behavior: "instant" });
 }
 
-railUpload.addEventListener("click", () => {
+railSpace.addEventListener("click", () => {
   clearTimeout(railExpandTimer);
-  showView("workspace");
-});
-railData.addEventListener("click", () => {
-  clearTimeout(railExpandTimer);
-  showView("images");
+  showView("personal");
 });
 railTeam.addEventListener("click", () => {
   clearTimeout(railExpandTimer);
@@ -246,8 +339,59 @@ railEnterprise.addEventListener("click", () => {
   clearTimeout(railExpandTimer);
   showView("enterprise");
 });
-backToUpload.addEventListener("click", () => showView("workspace"));
-classicViewAll.addEventListener("click", () => showView("images"));
+railAdmin.addEventListener("click", () => {
+  clearTimeout(railExpandTimer);
+  showView("admin");
+});
+/* ---------------- 图像列表工具条 ---------------- */
+
+if (projectImageUpload) {
+  projectImageUpload.addEventListener("click", () => imageUpload?.click());
+}
+
+if (projectImageFilter) {
+  projectImageFilter.addEventListener("change", () => {
+    imagesLoaded = false;
+    loadImages({ force: true }).catch((error) => {
+      setImageStatus(`筛选失败：${error.message}`, true);
+    });
+  });
+}
+
+if (removeSelected) {
+  removeSelected.addEventListener("click", async () => {
+    const picked = pickedList();
+    if (!picked.length) return;
+    const ok = await window.confirmDanger({
+      kicker: "REMOVE",
+      title: `从项目移除 ${picked.length} 张图片？`,
+      message: "只从当前项目移除，图片仍然留在小组图库里，可以再添加回来。",
+      confirmText: "移除",
+    });
+    if (!ok) return;
+    const projectId = activeProject?.id;
+    if (!projectId) return;
+    removeSelected.disabled = true;
+    let removed = 0;
+    const failures = [];
+    for (const image of picked) {
+      try {
+        await call(() => sdk.removeProjectImage(projectId, image.id));
+        pickedImages.delete(String(image.id));
+        removed += 1;
+      } catch (error) {
+        failures.push(`${image.filename}：${error.message}`);
+      }
+    }
+    imagesLoaded = false;
+    await loadImages({ force: true }).catch(() => {});
+    if (failures.length) {
+      setImageStatus(`已移除 ${removed} 张，${failures.length} 张没成功：${failures[0]}`, true);
+    } else {
+      setImageStatus(`已移除 ${removed} 张`, false);
+    }
+  });
+}
 
 /* ---------------- 弹窗 ---------------- */
 
@@ -337,9 +481,17 @@ function toggleDialog(dialog) {
   else closeDialog(dialog);
 }
 
-railProfile.addEventListener("click", () => toggleDialog(profileDialog));
-closeProfileDialog.addEventListener("click", () => closeDialog(profileDialog));
-railSettings.addEventListener("click", () => toggleDialog(settingsDialog));
+/* 设置是同一个弹窗，两个入口各自落到对应分区：
+   「个人与账号」落到个人资料，「设置」落到外观与主题。
+   抽屉里的分区切换在 settings.js，这里只负责把它打开并指定分区。 */
+function openSettings(section) {
+  openDialog(settingsDialog);
+  const pane = ["profile", "theme", "upload", "space", "security"].includes(section) ? section : "profile";
+  window.VSSettings?.showPane?.(pane);
+}
+
+railProfile.addEventListener("click", () => openSettings("profile"));
+railSettings.addEventListener("click", () => openSettings("theme"));
 closeSettingsDialog.addEventListener("click", () => closeDialog(settingsDialog));
 openTargetSettings.addEventListener("click", () => {
   openDialog(targetSettingsDialog);
@@ -470,75 +622,82 @@ function showStatus(title, detail) {
   imageDataState.append(VS.el("strong", "", title), VS.el("p", "", detail));
 }
 
-function classicImageState(imageId) {
-  const state = analysisByImage.get(Number(imageId));
-  if (state?.kind === "result") return { key: "completed", label: "已完成" };
-  if (state?.kind === "task" && ACTIVE_TASK_STATES.has(state.status)) return { key: "analyzing", label: "分析中" };
-  if (state?.kind === "task" && ["auto_annotated", "approved"].includes(state.status)) return { key: "completed", label: "已完成" };
-  if (state?.kind === "task" && state.status === "failed") return { key: "failed", label: "分析失败" };
-  return { key: "waiting", label: "待分析" };
+// 工具条下面那一行灰字：上传结果、筛选失败、移除结果都写这里，不动列表本身
+function setImageStatus(message, error = false) {
+  if (!uploadFeedback) return;
+  uploadFeedback.textContent = message || "";
+  uploadFeedback.classList.toggle("is-error", Boolean(error));
 }
 
-function classicTargetText(imageId) {
-  const state = analysisByImage.get(Number(imageId));
-  if (state?.kind === "result" && state.labels?.length) return state.labels.slice(0, 3).join("、");
-  return targetPlanTitle.textContent && !targetPlanTitle.textContent.includes("读取")
-    ? targetPlanTitle.textContent
-    : "识别方案";
+// 「图像」列表的状态文案与配色。stage 由后端按「最该处理的那条任务」算好。
+const IMAGE_STAGE = {
+  none: { label: "未标注", tone: "muted" },
+  pending: { label: "待标注", tone: "wait" },
+  annotated: { label: "待审核", tone: "info" },
+  approved: { label: "已通过", tone: "pass" },
+  rejected: { label: "已退回", tone: "reject" },
+  failed: { label: "标注失败", tone: "reject" },
+};
+
+// 任务原始状态：比 stage 细，能把「排队中」「模型分析中」这种过程态说清楚。
+// live = 还在跑，标签后面加一个呼吸点，避免长时间没变化看起来像卡死。
+const TASK_IMAGE_STATUS = {
+  draft: { label: "草稿", tone: "muted" },
+  queued: { label: "排队中", tone: "wait", live: true },
+  auto_annotating: { label: "模型分析中", tone: "info", live: true },
+  auto_annotated: { label: "待复核", tone: "info" },
+  rejected_fix: { label: "退回修改", tone: "reject" },
+  rejected_reannotate: { label: "退回重标", tone: "reject" },
+  approved: { label: "已通过", tone: "pass" },
+  failed: { label: "标注失败", tone: "reject" },
+  cancelled: { label: "已取消", tone: "muted" },
+};
+
+function parseUtc(value) {
+  if (!value) return null;
+  const text = String(value);
+  const normalized = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(text) ? text : `${text}Z`;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function syncClassicDashboardStatuses() {
-  const totals = { analyzing: 0, completed: 0, waiting: 0 };
-  loadedImages.forEach((image) => {
-    const state = classicImageState(image.id);
-    if (state.key === "completed") totals.completed += 1;
-    else if (state.key === "analyzing") totals.analyzing += 1;
-    else totals.waiting += 1;
-  });
-  classicAnalyzingCount.textContent = String(totals.analyzing);
-  classicCompletedCount.textContent = String(totals.completed);
-  classicWaitingCount.textContent = String(totals.waiting);
-
-  classicRecentState.querySelectorAll(".classic-recent-row[data-image-id]").forEach((row) => {
-    const imageId = Number(row.dataset.imageId);
-    const state = classicImageState(imageId);
-    const status = row.querySelector(".classic-row-status");
-    const target = row.querySelector(".classic-row-target");
-    status.className = `classic-row-status is-${state.key}`;
-    status.textContent = state.label;
-    target.textContent = classicTargetText(imageId);
-  });
+/** 标注用时：从模型真正开跑算起，到本次处理结束为止，排队等待不计入。 */
+function durationText(image) {
+  const started = parseUtc(image.task_started_at) || parseUtc(image.task_created_at);
+  if (!started) return "";
+  // processed_at 是「标注跑完」的时刻；completed_at 要等复核通过才有。
+  // 只有正在跑的才拿当前时间兜底，否则排队中/已结束却缺时间戳的会虚增。
+  const running = image.task_status === "auto_annotating";
+  const end = parseUtc(image.task_processed_at) || parseUtc(image.task_completed_at) || (running ? new Date() : null);
+  if (!end) return "";
+  const seconds = Math.max(0, Math.round((end - started) / 1000));
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} 分 ${seconds % 60} 秒`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours} 小时 ${minutes % 60} 分`;
 }
 
-function renderClassicDashboard(images) {
-  classicRecentState.replaceChildren();
-  const recent = images.slice().reverse().slice(0, 4);
-  if (!recent.length) {
-    classicRecentState.classList.add("is-empty");
-    classicRecentState.append(VS.el("p", "", "还没有图像，上传后会在这里显示最近记录。"));
-    syncClassicDashboardStatuses();
-    return;
-  }
-  classicRecentState.classList.remove("is-empty");
-  recent.forEach((image) => {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "classic-recent-row";
-    row.dataset.imageId = String(image.id);
-    row.innerHTML = "<img class=\"classic-row-thumb\" alt=\"\" />"
-      + "<span class=\"classic-row-file\"><strong></strong><small></small></span>"
-      + "<span class=\"classic-row-target\"></span><span class=\"classic-row-status\"></span>"
-      + "<span class=\"material-symbols-rounded classic-row-go\" aria-hidden=\"true\">chevron_right</span>";
-    row.querySelector(".classic-row-file strong").textContent = image.filename;
-    row.querySelector(".classic-row-file small").textContent = `${image.width || "?"} × ${image.height || "?"} · ${formatSize(image.size_bytes)}`;
-    row.addEventListener("click", () => {
-      showView("images");
-      openImageDetail(image);
-    });
-    classicRecentState.append(row);
-    loadThumbnail(image, row.querySelector(".classic-row-thumb"));
-  });
-  syncClassicDashboardStatuses();
+const REVIEW_TAG = {
+  none: "未审核",
+  pending: "未审核",
+  approved: "已通过",
+  rejected: "已退回",
+};
+
+function stageOf(image) {
+  return IMAGE_STAGE[image.stage] || IMAGE_STAGE.none;
+}
+
+// 后端时间是不带时区的 UTC，浏览器会按本地时区解析，得补个 Z
+function imageWhen(value) {
+  if (!value) return "";
+  const text = String(value);
+  const normalized = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(text) ? text : `${text}Z`;
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (input) => String(input).padStart(2, "0");
+  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function renderImages(images) {
@@ -550,61 +709,222 @@ function renderImages(images) {
     if (!images.some((image) => Number(image.id) === Number(id))) pickedImages.delete(id);
   });
   if (!images.length) {
-    showStatus("还没有图像数据", "上传第一张图片，开始分析与标注。");
+    showStatus(
+      "还没有图像数据",
+      canUploadInProject()
+        ? "点右上角「上传图片」，选好的图会出现在这里。"
+        : "只有项目管理者或标注员能上传图片，等他们传完就会出现在这里。"
+    );
     syncImageToolbar();
-    renderClassicDashboard(images);
+    syncImagesMeta();
     return;
   }
 
   imageDataState.classList.remove("empty-state");
   imageDataState.classList.add("image-data-list-wrap");
 
-  const list = document.createElement("div");
-  list.className = "image-list";
-  // 后端按上传顺序返回，列表倒序显示最新的在最上面
-  images.slice().reverse().forEach((image) => {
-    // 行本身是 role=button，不再用 <button> 包着：按钮里不能再嵌 checkbox
-    const row = document.createElement("div");
-    row.className = "image-row";
-    row.dataset.imageId = String(image.id);
-    row.style.setProperty("--row-index", list.children.length);
-    row.tabIndex = 0;
-    row.setAttribute("role", "button");
-    row.setAttribute("aria-label", `打开 ${image.filename}`);
-    row.innerHTML = "<label class=\"image-pick\"><input type=\"checkbox\" aria-label=\"勾选这张图片\" /><span></span></label>"
-      + "<img class=\"image-thumb\" alt=\"\" /><span class=\"image-copy\"><strong></strong><small></small></span>";
-    row.querySelector("strong").textContent = image.filename;
-    const meta = row.querySelector("small");
-    meta.dataset.base = `${image.width || "?"} × ${image.height || "?"} · ${formatSize(image.size_bytes)}`;
-    meta.textContent = `${meta.dataset.base} · ${analysisText(image.id)}`;
-    row.addEventListener("click", () => openImageDetail(image));
-    row.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      openImageDetail(image);
-    });
+  const table = document.createElement("div");
+  table.className = "file-table";
+  table.setAttribute("role", "table");
+  table.setAttribute("aria-label", "项目图片");
 
-    const pick = row.querySelector(".image-pick");
-    const input = pick.querySelector("input");
-    input.checked = pickedImages.has(String(image.id));
-    // 勾选只改变选择状态，不该顺带把详情页打开
-    pick.addEventListener("click", (event) => event.stopPropagation());
-    pick.addEventListener("keydown", (event) => event.stopPropagation());
-    input.addEventListener("change", () => {
-      if (input.checked) pickedImages.add(String(image.id));
-      else pickedImages.delete(String(image.id));
-      row.classList.toggle("is-picked", input.checked);
-      syncImageToolbar();
-    });
-    row.classList.toggle("is-picked", input.checked);
-
-    list.append(row);
-    loadThumbnail(image, row.querySelector(".image-thumb"));
+  const head = document.createElement("div");
+  head.className = "file-row file-head";
+  head.setAttribute("role", "row");
+  [
+    ["file-col-pick", ""],
+    ["file-col-name", "文件名"],
+    ["file-col-meta", "尺寸 / 大小"],
+    ["file-col-status", "状态"],
+    ["file-col-task", "任务"],
+    ["file-col-time", "上传时间"],
+    ["file-col-actions", "操作"],
+  ].forEach(([className, text]) => {
+    const cell = el("span", className, text);
+    cell.setAttribute("role", "columnheader");
+    head.append(cell);
   });
-  imageDataState.replaceChildren(list);
+  table.append(head);
+
+  // 后端按上传顺序返回，列表倒序显示最新的在最上面
+  images
+    .slice()
+    .reverse()
+    .forEach((image) => table.append(imageRow(image)));
+
+  imageDataState.replaceChildren(table);
   syncImageToolbar();
-  renderClassicDashboard(images);
+  syncImagesMeta();
 }
+
+function imageRow(image) {
+  // 行本身是 role=button，不再用 <button> 包着：按钮里不能再嵌 checkbox
+  const stage = stageOf(image);
+  const row = document.createElement("div");
+  row.className = "file-row";
+  row.dataset.imageId = String(image.id);
+  row.dataset.stage = image.stage || "none";
+  row.tabIndex = 0;
+  row.setAttribute("role", "row");
+  row.setAttribute("aria-label", `打开 ${image.filename}`);
+
+  const pickCell = el("span", "file-col-pick");
+  const pick = el("label", "image-pick");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.setAttribute("aria-label", `勾选 ${image.filename}`);
+  pick.append(input, el("span", ""));
+  pickCell.append(pick);
+
+  const nameCell = el("span", "file-col-name");
+  const thumb = el("img", "file-thumb");
+  thumb.alt = "";
+  const copy = el("span", "file-name-copy");
+  copy.append(
+    el("strong", "", image.filename),
+    el("small", "", image.task_mode === "manual" ? "人工任务" : "")
+  );
+  nameCell.append(thumb, copy);
+
+  const metaCell = el(
+    "span",
+    "file-col-meta",
+    `${image.width || "?"} × ${image.height || "?"} · ${formatSize(image.size_bytes)}`
+  );
+
+  const statusCell = el("span", "file-col-status");
+  const taskState = image.task_status ? TASK_IMAGE_STATUS[image.task_status] : null;
+  if (taskState) {
+    const mainTag = el("span", `tag tag-${taskState.tone}`, taskState.label);
+    if (taskState.live) mainTag.classList.add("is-live");
+    statusCell.append(mainTag);
+    const span = durationText(image);
+    if (span) {
+      const hint = el("small", "file-duration", `(${span})`);
+      hint.title = "模型处理用时，不含排队等待";
+      statusCell.append(hint);
+    }
+  } else {
+    const stageTag = el("span", `tag tag-${stage.tone}`, image.task_count ? stage.label : "未加入任务");
+    statusCell.append(stageTag);
+  }
+
+  const taskCell = el(
+    "span",
+    "file-col-task",
+    image.task_count
+      ? `${image.task_name || `任务 #${image.task_id}`}${image.task_count > 1 ? ` · 共 ${image.task_count} 个任务` : ""}`
+      : "—"
+  );
+
+  const timeCell = el("span", "file-col-time", imageWhen(image.created_at));
+
+  const actions = el("span", "file-col-actions");
+  if (image.can_review) {
+    const button = el("button", "mini-button is-pass", "审核");
+    button.type = "button";
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openReview(image);
+    });
+    actions.append(button);
+  } else if (image.can_annotate) {
+    const button = el("button", "mini-button is-accent", "标注");
+    button.type = "button";
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      window.VSAnnotate?.open({
+        projectId: activeProject?.id,
+        taskId: image.task_id,
+        taskImageId: image.task_image_id,
+      });
+    });
+    actions.append(button);
+  } else {
+    actions.append(el("span", "file-action-hint", stage.label));
+  }
+
+  row.append(pickCell, nameCell, metaCell, statusCell, taskCell, timeCell, actions);
+  row.addEventListener("click", () => openImageDetail(image));
+  row.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openImageDetail(image);
+  });
+
+  input.checked = pickedImages.has(String(image.id));
+  // 勾选只改变选择状态，不该顺带把详情页打开
+  pick.addEventListener("click", (event) => event.stopPropagation());
+  pick.addEventListener("keydown", (event) => event.stopPropagation());
+  input.addEventListener("change", () => {
+    if (input.checked) pickedImages.add(String(image.id));
+    else pickedImages.delete(String(image.id));
+    row.classList.toggle("is-picked", input.checked);
+    syncImageToolbar();
+  });
+  row.classList.toggle("is-picked", input.checked);
+
+  loadThumbnail(image, thumb);
+  return row;
+}
+
+function openReview(image) {
+  if (!window.VSReview) {
+    showUploadToast("暂时不能复核", "复核面板没有加载，刷新页面后再试");
+    return;
+  }
+  window.VSReview.open({
+    projectId: activeProject?.id,
+    taskId: image.task_id,
+    taskImageId: image.task_image_id,
+    image,
+    onDone: (result) => {
+      image.review_status = result === "rejected" ? "rejected" : "approved";
+      image.stage = result === "rejected" ? "rejected" : "approved";
+      showUploadToast(
+        result === "rejected" ? "已驳回这一张" : "已通过这一张",
+        result === "rejected"
+          ? "标注员会在任务里看到你的原因"
+          : "继续审下一张，全部通过后任务会自动通过"
+      );
+      loadImages({ force: true }).catch(() => {});
+      // 逐图全部通过时后端直接把任务推到 approved，任务列表要跟着变
+      window.VSProjects?.refreshTasks?.();
+      if (result !== "rejected") {
+        sdk
+          .getTask(activeProject?.id, image.task_id)
+          .then((task) => {
+            if (task?.status === "approved") {
+              showUploadToast("任务已通过复核", "所有图片都审过了，不用再回任务列表处理。");
+            }
+          })
+          .catch(() => {});
+      }
+    },
+  });
+}
+
+function syncImagesMeta() {
+  if (!projectImagesMeta) return;
+  const total = loadedImages.length;
+  const filtered = Boolean(currentFilterValue());
+  if (!total) {
+    projectImagesMeta.textContent = filtered ? "没有符合筛选的图片" : "还没有图片";
+    return;
+  }
+  // 筛选时后端已经只返回命中的图，再报「筛出 N / 共 M」会重复
+  const bits = [filtered ? `筛出 ${total} 张` : `共 ${total} 张图片`];
+  if (!filtered) {
+    const waiting = loadedImages.filter((image) => image.stage === "pending").length;
+    const review = loadedImages.filter((image) => image.stage === "annotated").length;
+    const approved = loadedImages.filter((image) => image.stage === "approved").length;
+    if (waiting) bits.push(`${waiting} 张待标注`);
+    if (review) bits.push(`${review} 张待审核`);
+    if (approved) bits.push(`${approved} 张已通过`);
+  }
+  projectImagesMeta.textContent = bits.join(" · ");
+}
+
 
 /* ---------------- 勾选与批量下载 ---------------- */
 
@@ -612,6 +932,10 @@ const pickedImages = new Set();
 
 function pickedList() {
   return loadedImages.filter((image) => pickedImages.has(String(image.id)));
+}
+
+function currentFilterValue() {
+  return projectImageFilter ? projectImageFilter.value : "";
 }
 
 function syncImageToolbar() {
@@ -623,6 +947,10 @@ function syncImageToolbar() {
     ? `已选 ${picked.length} 张${annotated ? ` · 其中 ${annotated} 张有标注` : ""}`
     : "还没有选中图片";
   downloadSelected.disabled = picked.length === 0;
+  if (removeSelected) {
+    removeSelected.disabled = picked.length === 0;
+    removeSelected.textContent = picked.length ? `移除所选 ${picked.length}` : "移除所选";
+  }
   selectAllImages.checked = total > 0 && picked.length === total;
   selectAllImages.indeterminate = picked.length > 0 && picked.length < total;
 }
@@ -630,7 +958,7 @@ function syncImageToolbar() {
 selectAllImages.addEventListener("change", () => {
   pickedImages.clear();
   if (selectAllImages.checked) loadedImages.forEach((image) => pickedImages.add(String(image.id)));
-  document.querySelectorAll(".image-row[data-image-id]").forEach((row) => {
+  document.querySelectorAll(".file-row[data-image-id]").forEach((row) => {
     const on = pickedImages.has(String(row.dataset.imageId));
     row.classList.toggle("is-picked", on);
     const input = row.querySelector(".image-pick input");
@@ -803,39 +1131,113 @@ async function loadThumbnail(image, target) {
   }
 }
 
+// 模型任务是异步跑的：提交完页面拿到的是「排队中 / 标注中」，
+// 之后没有任何推送，所以必须自己盯着。只要列表里还有在跑的任务就每 3 秒重取一次，
+// 跑完自动停；期间顺带把「我的任务」和统计一起刷新，不用用户点刷新。
+const RUNNING_TASK_STATUS = new Set(["queued", "auto_annotating"]);
+let statusPollTimer = 0;
+let statusPollCount = 0;
+let statusNoteOwned = false; // 状态栏那句话是不是轮询写的，是的话跑完要收回去
+const STATUS_POLL_MS = 3000;
+const STATUS_POLL_LIMIT = 100; // 约 5 分钟，防止模型卡死时无限轮询
+
+function stopStatusPoll() {
+  clearTimeout(statusPollTimer);
+  statusPollTimer = 0;
+  statusPollCount = 0;
+  statusNoteOwned = false;
+}
+
+function scheduleStatusPoll(images) {
+  const running = (images || []).filter((item) => RUNNING_TASK_STATUS.has(item.task_status));
+  clearTimeout(statusPollTimer);
+  statusPollTimer = 0;
+  if (!running.length) {
+    if (statusPollCount > 0) {
+      // 刚跑完：统计与「我的任务」一次性对齐，轮询期间那行提示收回去
+      statusPollCount = 0;
+      if (statusNoteOwned) {
+        statusNoteOwned = false;
+        setImageStatus?.("");
+      }
+      window.VSProjects?.refreshPersonal?.();
+      window.VSTeam?.refreshResults?.();
+      window.VSTeamEnterprise?.refresh?.();
+    }
+    return;
+  }
+  if (statusPollCount >= STATUS_POLL_LIMIT) return;
+  statusPollCount += 1;
+  statusNoteOwned = true;
+  setImageStatus?.(`模型正在分析 ${running.length} 张图片…`);
+  statusPollTimer = window.setTimeout(() => {
+    if (!activeProject) return;
+    imagesLoaded = false;
+    loadImages({ force: true }).catch(() => {});
+  }, STATUS_POLL_MS);
+}
+
 async function loadImages({ force = false } = {}) {
   if (imageLoadPromise) return imageLoadPromise;
   if (imagesLoaded && !force) return loadedImages;
   imageLoadPromise = (async () => {
     const project = await ensureImageProject();
     const [page] = await Promise.all([
-      call(() => sdk.listProjectImages(project.id, { limit: 200 })),
+      call(() =>
+        sdk.listProjectImages(project.id, {
+          limit: 200,
+          // 空串代表不筛选，后端只认那六个 stage 值
+          stage: currentFilterValue() || undefined,
+        })
+      ),
       loadAnalysisState(project),
     ]);
     const images = Array.isArray(page) ? page : (page.items || []);
     imagesLoaded = true;
     renderImages(images);
+    scheduleStatusPoll(images);
     return images;
   })().finally(() => { imageLoadPromise = null; });
   return imageLoadPromise;
 }
 
-// 新后端要求图片必须属于项目。界面不暴露项目概念，内部自动维护一个默认项目。
-async function ensureImageProject() {
-  if (!imageProjectPromise) {
-    imageProjectPromise = (async () => {
-      const projects = await call(() => sdk.listProjects());
-      const existing = projects.find((project) => project.name === IMAGE_PROJECT_NAME);
-      if (existing) return existing;
-      return call(() => sdk.createProject(IMAGE_PROJECT_NAME, {
-        description: "Vision Studio 自动维护的个人图像数据",
-      }));
-    })().catch((error) => {
-      imageProjectPromise = null;
-      throw error;
-    });
-  }
-  return imageProjectPromise;
+// 图片、任务、类目都挂在项目上。项目页打开哪个项目，这里就用哪个。
+function ensureImageProject() {
+  if (!activeProject) return Promise.reject(new Error("请先打开一个项目"));
+  return Promise.resolve(activeProject);
+}
+
+/** 项目页切到某个项目时调用：重置缓存并重新拉图片与分析状态。 */
+function loadProject(project, { force = true } = {}) {
+  activeProject = project;
+  imagesLoaded = false;
+  imageLoadPromise = null;
+  stopStatusPoll();
+  applyProjectCaps();
+  loadProjectTargets().catch(() => {});
+  return loadImages({ force });
+}
+
+// 项目里能做什么由后端算好的 can_upload / can_manage 决定：
+// 只读成员不该看到「上传图片」「移除所选」「设置识别目标」，点下去只会收到 403。
+function canUploadInProject() {
+  return !activeProject || activeProject.can_upload !== false;
+}
+
+function applyProjectCaps() {
+  const canUpload = canUploadInProject();
+  const canManage = !activeProject || activeProject.can_manage !== false;
+  if (projectImageUpload) projectImageUpload.hidden = !canUpload;
+  if (removeSelected) removeSelected.hidden = !canUpload;
+  if (openTargetSettings) openTargetSettings.hidden = !canManage;
+}
+
+// 图片详情里的「删除图片」：后端只认上传者或空间 owner/admin，
+// 所以这里按「上传者本人 或 能管项目」放行，其余人直接不显示按钮。
+function canDeleteImage(image) {
+  if (currentView !== "project" || !activeProject) return true;
+  if (activeProject.can_manage) return true;
+  return Boolean(activeAccount && image.uploader_account_id === activeAccount.id);
 }
 
 const ACTIVE_TASK_STATES = new Set(["draft", "queued", "auto_annotating"]);
@@ -863,10 +1265,6 @@ function analysisText(imageId) {
 }
 
 function updateAnalysisLabels() {
-  document.querySelectorAll(".image-row[data-image-id]").forEach((row) => {
-    const meta = row.querySelector("small");
-    meta.textContent = `${meta.dataset.base} · ${analysisText(row.dataset.imageId)}`;
-  });
   if (currentImage && detailAnalysis) {
     const analysisId = currentImageContext.analysisImageId || currentImage.id;
     const hasState = analysisByImage.has(Number(analysisId));
@@ -875,7 +1273,6 @@ function updateAnalysisLabels() {
       : analysisText(analysisId);
     renderAnnotationOverlay(analysisId);
   }
-  syncClassicDashboardStatuses();
 }
 
 function renderAnnotationOverlay(imageId) {
@@ -978,6 +1375,9 @@ async function loadAnalysisState(project) {
 function scheduleTaskPoll(projectId, taskId, failures = 0) {
   clearTimeout(analysisPollTimer);
   analysisPollTimer = window.setTimeout(async () => {
+    // 已经离开这个项目页（或换到别的栏目）就停手：任务在后台照常跑，
+    // 回来时 loadImages 会重新读一次状态，没必要在别处一直打这个接口。
+    if (currentView !== "project" || !activeProject || activeProject.id !== projectId) return;
     try {
       const task = await call(() => sdk.getTask(projectId, taskId));
       applyTaskState(task);
@@ -1007,14 +1407,131 @@ function renderProjectTargets(targets, { unavailable = false } = {}) {
   if (unavailable) {
     targetPlanTitle.textContent = "暂时无法读取识别方案";
     targetPlanDetail.textContent = "仍可在选择图片后手动填写，不影响上传。";
-    syncClassicDashboardStatuses();
     return;
   }
   targetPlanTitle.textContent = targets.length ? targets.join("、") : "尚未设置识别目标";
   targetPlanDetail.textContent = targets.length
-    ? `已保存 ${targets.length} 项，后续上传会自动带出。`
+    ? `已保存 ${targets.length} 项，置信度 ${formatThreshold(currentBoxThreshold)}，后续上传会自动带出。`
     : "设置一次，后续上传会自动复用。";
-  syncClassicDashboardStatuses();
+}
+
+/* ---------------- 识别目标逐条编辑 ---------------- */
+
+// 保存时用这份快照算「哪些被删掉了」：编辑框里没有的、且原本存在的，就是要删的。
+let targetSnapshot = [];
+
+function targetRowNode({ id = null, zh = "", en = "" }) {
+  const row = el("li", "target-row");
+  if (id != null) row.dataset.id = String(id);
+  row.dataset.zh = zh;
+  row.dataset.en = en;
+
+  const zhInput = el("input", "target-zh");
+  zhInput.type = "text";
+  zhInput.maxLength = 50;
+  zhInput.placeholder = "中文名";
+  zhInput.value = zh;
+  zhInput.autocomplete = "off";
+  zhInput.setAttribute("aria-label", "目标中文名");
+
+  const enInput = el("input", "target-en");
+  enInput.type = "text";
+  enInput.maxLength = 100;
+  enInput.placeholder = "英文提示词（留空自动翻译）";
+  enInput.value = en;
+  enInput.autocomplete = "off";
+  enInput.setAttribute("aria-label", "目标英文提示词");
+
+  const remove = el("button", "target-remove", "×");
+  remove.type = "button";
+  remove.title = "移除这一条";
+  remove.setAttribute("aria-label", `移除 ${zh || "这一条目标"}`);
+  remove.addEventListener("click", () => {
+    row.remove();
+    syncTargetRows();
+    const dropped = droppedTargetCount();
+    projectTargetsStatus.classList.remove("is-error");
+    projectTargetsStatus.textContent = dropped
+      ? `已移除 ${dropped} 条，保存后生效`
+      : "点「保存识别方案」才会写回项目";
+  });
+
+  for (const input of [zhInput, enInput]) {
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        addTargetFromInputs();
+      }
+    });
+  }
+
+  row.append(zhInput, enInput, remove);
+  return row;
+}
+
+function syncTargetRows() {
+  if (targetEmpty) targetEmpty.hidden = targetRows.children.length > 0;
+}
+
+function renderTargetRows(categories) {
+  targetSnapshot = categories.map((item) => ({ id: item.id, zh: item.zh_name, en: item.en_name }));
+  targetRows.replaceChildren();
+  for (const item of targetSnapshot) {
+    targetRows.append(targetRowNode({ id: item.id, zh: item.zh, en: item.en }));
+  }
+  syncTargetRows();
+}
+
+function collectTargetRows() {
+  return [...targetRows.children]
+    .map((row) => ({
+      id: row.dataset.id ? Number(row.dataset.id) : null,
+      zh: (row.querySelector(".target-zh")?.value || "").trim(),
+      en: (row.querySelector(".target-en")?.value || "").trim(),
+      wasZh: row.dataset.zh || "",
+      wasEn: row.dataset.en || "",
+    }))
+    .filter((row) => row.zh || row.en);
+}
+
+function droppedTargetCount() {
+  const kept = new Set(collectTargetRows().map((row) => row.id).filter(Boolean));
+  return targetSnapshot.filter((item) => !kept.has(item.id)).length;
+}
+
+function addTargetFromInputs() {
+  const zh = targetNewZh.value.trim();
+  const en = targetNewEn.value.trim();
+  if (!zh) {
+    projectTargetsStatus.classList.add("is-error");
+    projectTargetsStatus.textContent = "先填中文名，英文可以留空";
+    targetNewZh.focus();
+    return;
+  }
+  const clash = collectTargetRows().some((row) => row.zh === zh);
+  if (clash) {
+    projectTargetsStatus.classList.add("is-error");
+    projectTargetsStatus.textContent = `「${zh}」已经在列表里了`;
+    targetNewZh.focus();
+    return;
+  }
+  targetRows.append(targetRowNode({ zh, en }));
+  syncTargetRows();
+  targetNewZh.value = "";
+  targetNewEn.value = "";
+  targetNewZh.focus();
+  projectTargetsStatus.classList.remove("is-error");
+  projectTargetsStatus.textContent = `已添加「${zh}」，保存后生效`;
+}
+
+targetAddButton?.addEventListener("click", addTargetFromInputs);
+for (const input of [targetNewZh, targetNewEn]) {
+  input?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addTargetFromInputs();
+    }
+  });
 }
 
 async function loadProjectTargets({ forEditor = false } = {}) {
@@ -1026,11 +1543,14 @@ async function loadProjectTargets({ forEditor = false } = {}) {
   try {
     const project = await ensureImageProject();
     const categories = await call(() => sdk.listCategories(project.id, { includeDisabled: true }));
+    // 阈值顺带读一次：方案卡片和对话框滑块都用它，读不到就退回默认值。
+    const config = await call(() => sdk.getAutoConfig(project.id)).catch(() => null);
+    setBoxThreshold(config?.box_threshold ?? FALLBACK_BOX_THRESHOLD);
     const targets = categories.filter((item) => item.enabled).map((item) => item.zh_name).filter(Boolean);
     renderProjectTargets(targets);
     if (!analysisTargetsDirty) analysisTargets.value = targets.join("、");
     if (forEditor) {
-      projectTargets.value = targets.join("、");
+      renderTargetRows(categories.filter((item) => item.enabled));
       projectTargetsStatus.textContent = targets.length ? `已读取 ${targets.length} 项识别目标` : "还没有保存识别目标";
     }
     return targets;
@@ -1048,7 +1568,8 @@ async function loadProjectTargets({ forEditor = false } = {}) {
 
 // 用户填的识别目标要变成项目类目：新词建类目，旧词按需启停，
 // 再打开自动标注与中文翻译。这样模型才知道要检测什么。
-async function syncAnalysisConfig(projectId, targets) {
+// boxThreshold 只在「识别方案」保存时显式传入：上传流程不传，免得悄悄改掉老项目的阈值。
+async function syncAnalysisConfig(projectId, targets, { boxThreshold } = {}) {
   const existing = await call(() => sdk.listCategories(projectId, { includeDisabled: true }));
   const selected = new Set(targets);
   for (const category of existing) {
@@ -1061,18 +1582,27 @@ async function syncAnalysisConfig(projectId, targets) {
   for (const name of selected) {
     await call(() => sdk.createCategory(projectId, { zhName: name, enabled: true }));
   }
-  await call(() => sdk.updateAutoConfig(projectId, {
+  const fields = {
     auto_annotate_enabled: true,
     translate_enabled: true,
-  }));
+  };
+  if (boxThreshold !== undefined) fields.box_threshold = boxThreshold;
+  await call(() => sdk.updateAutoConfig(projectId, fields));
 }
 
-async function submitAnalysisTask(project, images, targets) {
+/**
+ * 上传后立刻建任务。
+ * auto   → 提交给模型，跑完进复核；
+ * manual → 指派给某个人（默认自己），在标注工作台里画框。
+ */
+async function submitUploadTask(project, images, { mode = "auto", targets = [], assignee = null } = {}) {
   await syncAnalysisConfig(project.id, targets);
+  const stamp = new Date().toLocaleString("zh-CN", { hour12: false });
   const task = await call(() => sdk.createTask(project.id, {
-    name: `自动分析 ${new Date().toLocaleString("zh-CN", { hour12: false })}`,
+    name: mode === "manual" ? `人工标注 ${stamp}` : `自动分析 ${stamp}`,
     imageIds: images.map((image) => image.id),
-    mode: "auto",
+    mode,
+    assigneeAccountId: mode === "manual" ? (assignee || activeAccount?.id || null) : assignee,
   }));
   const submitted = await call(() => sdk.submitTask(project.id, task.id));
   localStorage.setItem(`vision_recent_task_${project.id}`, String(task.id));
@@ -1083,27 +1613,83 @@ async function submitAnalysisTask(project, images, targets) {
 
 analysisTargets.addEventListener("input", () => { analysisTargetsDirty = true; });
 
+projectBoxThreshold?.addEventListener("input", () => {
+  if (projectBoxThresholdValue) projectBoxThresholdValue.textContent = formatThreshold(projectBoxThreshold.value);
+});
+
 targetSettingsForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const targets = parseTargets(projectTargets.value);
+  const rows = collectTargetRows();
   projectTargetsStatus.classList.remove("is-error");
-  if (!targets.length) {
+
+  if (!rows.length) {
     projectTargetsStatus.classList.add("is-error");
-    projectTargetsStatus.textContent = "请至少填写一个识别目标";
-    projectTargets.focus();
+    projectTargetsStatus.textContent = "请至少添加一个识别目标";
+    targetNewZh.focus();
     return;
   }
+  const missingZh = rows.find((row) => !row.zh);
+  if (missingZh) {
+    projectTargetsStatus.classList.add("is-error");
+    projectTargetsStatus.textContent = "有一条只填了英文，请补上中文名";
+    return;
+  }
+  const seen = new Set();
+  for (const row of rows) {
+    if (seen.has(row.zh)) {
+      projectTargetsStatus.classList.add("is-error");
+      projectTargetsStatus.textContent = `「${row.zh}」重复了，删掉其中一条`;
+      return;
+    }
+    seen.add(row.zh);
+  }
+
   saveProjectTargets.disabled = true;
   saveProjectTargets.textContent = "正在保存…";
   projectTargetsStatus.textContent = "正在同步到项目…";
   try {
     const project = await ensureImageProject();
-    await syncAnalysisConfig(project.id, targets);
-    projectTargets.value = targets.join("、");
-    analysisTargets.value = targets.join("、");
+    const boxThreshold = Number(projectBoxThreshold.value);
+    const keptIds = new Set(rows.map((row) => row.id).filter(Boolean));
+    const removed = targetSnapshot.filter((item) => !keptIds.has(item.id));
+
+    let created = 0;
+    let updated = 0;
+    for (const row of rows) {
+      if (row.id == null) {
+        // 新加的一条：英文留空交给后端翻译
+        await call(() => sdk.createCategory(project.id, { zhName: row.zh, enName: row.en, enabled: true }));
+        created += 1;
+        continue;
+      }
+      if (row.zh === row.wasZh && row.en === row.wasEn) continue;
+      // en_name 传空串 = 按当前中文名重新翻译
+      await call(() => sdk.updateCategory(project.id, row.id, { zh_name: row.zh, en_name: row.en, enabled: true }));
+      updated += 1;
+    }
+    for (const item of removed) {
+      await call(() => sdk.deleteCategory(project.id, item.id));
+    }
+
+    await call(() => sdk.updateAutoConfig(project.id, {
+      auto_annotate_enabled: true,
+      translate_enabled: true,
+      box_threshold: boxThreshold,
+    }));
+    setBoxThreshold(boxThreshold);
+
+    const fresh = await call(() => sdk.listCategories(project.id, { includeDisabled: true }));
+    const names = fresh.filter((item) => item.enabled).map((item) => item.zh_name).filter(Boolean);
+    renderTargetRows(fresh.filter((item) => item.enabled));
+    analysisTargets.value = names.join("、");
     analysisTargetsDirty = false;
-    renderProjectTargets(targets);
-    projectTargetsStatus.textContent = `已保存 ${targets.length} 项，下一次上传会自动使用`;
+    renderProjectTargets(names);
+
+    const bits = [`已保存 ${names.length} 项`];
+    if (created) bits.push(`新增 ${created}`);
+    if (updated) bits.push(`修改 ${updated}`);
+    if (removed.length) bits.push(`删除 ${removed.length}`);
+    projectTargetsStatus.textContent = `${bits.join("，")}，置信度 ${formatThreshold(boxThreshold)}，下一次上传会自动使用`;
   } catch (error) {
     projectTargetsStatus.classList.add("is-error");
     projectTargetsStatus.textContent = error.message === "Failed to fetch" ? "暂时无法连接后端，请稍后重试" : error.message;
@@ -1124,7 +1710,7 @@ async function openImageDetail(image, options = {}) {
   currentImageContext = {
     source: options.source || "personal",
     analysisImageId: Number(options.analysisImageId || image.id),
-    canDelete: options.canDelete !== false,
+    canDelete: options.canDelete !== false && canDeleteImage(image),
   };
   detailTitle.textContent = image.filename;
   detailDimensions.textContent = `${image.width || "?"} × ${image.height || "?"}`;
@@ -1139,12 +1725,60 @@ async function openImageDetail(image, options = {}) {
   downloadAnnotated.hidden = source !== "personal";
   deleteImageButton.hidden = !currentImageContext.canDelete;
   // 从哪个栏目点进来，"返回"就回哪里
-  backToImages.textContent = source === "team" ? "← 返回小组"
-    : source === "enterprise" ? "← 返回企业空间"
-      : "← 返回图像数据";
+  backToImages.textContent = source === "team" ? "← 返回空间"
+    : source === "enterprise" ? "← 返回空间"
+      : "← 返回项目";
   detailImage.removeAttribute("src");
   annotationOverlay.replaceChildren();
+  // 「在标注台打开」只在项目里、且这张图确实落在某个可改的任务上时才出现
+  if (detailAnnotate) {
+    detailAnnotate.hidden = true;
+    detailAnnotate.onclick = null;
+  }
+  if (detailReview) {
+    detailReview.hidden = true;
+    detailReview.onclick = null;
+  }
+  if (currentView === "project" && activeProject?.id) {
+    sdk
+      .listImageTasks(activeProject.id, image.id)
+      .then((rows) => {
+        if (currentImage !== image) return;
+        // 能不能改 / 能不能审都由后端算好（can_annotate / can_review），
+        // 这里只负责显不显示按钮——前端自己拼权限会放过只读成员，点进去才被 403 挡回来。
+        const editable = (rows || []).find((row) => row.can_annotate);
+        const reviewable = (rows || []).find((row) => row.can_review);
+        if (reviewable && detailReview) {
+          detailReview.hidden = false;
+          detailReview.onclick = () => {
+            const projectId = activeProject?.id;
+            closeImageDetail(true);
+            window.VSReview?.open({
+              projectId,
+              taskId: reviewable.task_id,
+              taskImageId: reviewable.task_image_id,
+              image,
+              onDone: () => loadImages({ force: true }).catch(() => {}),
+            });
+          };
+        }
+        if (!editable || !detailAnnotate) return;
+        detailAnnotate.hidden = false;
+        detailAnnotate.onclick = () => {
+          const projectId = activeProject?.id;
+          closeImageDetail(true);
+          window.VSAnnotate?.open({
+            projectId,
+            taskId: editable.task_id,
+            taskImageId: editable.task_image_id,
+          });
+        };
+      })
+      .catch(() => {});
+  }
   content.hidden = true;
+  // 详情层自带返回/关闭，顶栏在这里只剩重复的项目信息，收起它多给图片一点高度
+  document.body.classList.add("has-layer");
   detailView.hidden = false;
   requestAnimationFrame(() => detailView.classList.add("is-visible"));
 
@@ -1174,12 +1808,14 @@ function closeImageDetail(immediate = false) {
   if (immediate) {
     detailView.hidden = true;
     content.hidden = false;
+    document.body.classList.remove("has-layer");
     return;
   }
   // 等淡出走完再撤掉这一层，否则会看到硬切
   detailCloseTimer = window.setTimeout(() => {
     detailView.hidden = true;
     content.hidden = false;
+    document.body.classList.remove("has-layer");
   }, 180);
 }
 
@@ -1299,13 +1935,13 @@ function askUploadTarget(groups, enterprises) {
   const team = groups[0];
   const ent = enterprises[0];
   const options = [
-    { id: "personal", icon: "person", title: "个人工作台", note: "上传后立即启动模型分析，结果在图像数据里" },
+    { id: "personal", icon: "person", title: "个人空间", note: "上传后立即启动模型分析，结果就在同一页的图像列表里" },
     {
       id: "team", icon: "groups", title: team.name,
       note: groups.length > 1 ? `小组空间 · 共 ${groups.length} 个小组，可在小组页切换` : "小组空间 · 归档到小组成果",
     },
     {
-      id: "enterprise", icon: "corporate_fare", title: ent.name,
+      id: "enterprise", icon: "business", title: ent.name,
       note: ent.my_role === "member" ? "企业空间 · 上传后需要管理员审核" : "企业空间 · 直接进入企业图库",
     },
   ];
@@ -1372,6 +2008,196 @@ async function sendFilesTo(files, destination, groups, enterprises) {
   }
 }
 
+/* ---------------- 上传选项：传到哪 / 怎么标 / 指派给谁 ---------------- */
+
+// 除了个人空间，还有哪些小组与企业可以作为上传目标
+let uploadSpaces = [];
+// 「设置 → 上传偏好」里存的默认值，第一次渲染时套用一次，之后尊重用户当次的选择
+let uploadPrefApplied = false;
+
+const UPLOAD_PREF_KEY = "vision_upload_pref";
+
+function readUploadPref() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(UPLOAD_PREF_KEY) || "{}");
+    return { mode: raw.mode === "manual" ? "manual" : "auto", space: raw.space || "personal" };
+  } catch {
+    return { mode: "auto", space: "personal" };
+  }
+}
+
+function writeUploadPref(patch) {
+  const next = { ...readUploadPref(), ...patch };
+  try { localStorage.setItem(UPLOAD_PREF_KEY, JSON.stringify(next)); } catch { /* 无存储权限时仅本次生效 */ }
+  return next;
+}
+
+function syncPrefSpaceOptions() {
+  const pref = document.querySelector("#prefUploadSpace");
+  if (!pref) return;
+  const keep = pref.value || readUploadPref().space;
+  pref.replaceChildren();
+  const personal = document.createElement("option");
+  personal.value = "personal";
+  personal.textContent = "个人空间";
+  pref.append(personal);
+  uploadSpaces.forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.value;
+    option.textContent = `${item.kind === "team" ? "小组" : "企业"} · ${item.name}`;
+    pref.append(option);
+  });
+  pref.value = [...pref.options].some((option) => option.value === keep) ? keep : "personal";
+}
+
+function applyUploadPref() {
+  const pref = readUploadPref();
+  if (uploadMode) uploadMode.value = pref.mode;
+  if (uploadSpace) {
+    uploadSpace.value = [...uploadSpace.options].some((option) => option.value === pref.space)
+      ? pref.space
+      : "personal";
+  }
+  syncUploadDestination();
+}
+
+async function refreshUploadOptions() {
+  if (!uploadSpace) return;
+  const keep = uploadSpace.value;
+  uploadSpaces = [];
+  const [groups, enterprises] = await Promise.all([
+    sdk.listGroups().catch(() => []),
+    sdk.listEnterprises().catch(() => []),
+  ]);
+  (groups || []).forEach((group) => {
+    uploadSpaces.push({ value: `team:${group.id}`, kind: "team", groupId: group.id, name: group.name });
+  });
+  (enterprises || []).forEach((ent) => {
+    uploadSpaces.push({
+      value: `enterprise:${ent.id}`,
+      kind: "enterprise",
+      groupId: ent.group_id,
+      entId: ent.id,
+      name: ent.name,
+    });
+  });
+
+  uploadSpace.replaceChildren();
+  const personal = document.createElement("option");
+  personal.value = "personal";
+  personal.textContent = "个人空间";
+  uploadSpace.append(personal);
+  uploadSpaces.forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.value;
+    option.textContent = `${item.kind === "team" ? "小组" : "企业"} · ${item.name}`;
+    uploadSpace.append(option);
+  });
+  if (uploadSpaces.some((item) => item.value === keep)) uploadSpace.value = keep;
+  syncPrefSpaceOptions();
+  if (!uploadPrefApplied) {
+    uploadPrefApplied = true;
+    applyUploadPref();
+  } else {
+    syncUploadDestination();
+  }
+}
+
+function currentDestination() {
+  const value = uploadSpace?.value || "personal";
+  if (value === "personal") return { kind: "personal", groupId: null, name: "个人空间" };
+  return uploadSpaces.find((item) => item.value === value) || { kind: "personal", groupId: null, name: "个人空间" };
+}
+
+async function loadAssignees(destination) {
+  if (!uploadAssignee) return;
+  uploadAssignee.replaceChildren();
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "不指派 · 我来做";
+  uploadAssignee.append(none);
+  try {
+    const members = destination.kind === "team"
+      ? await call(() => sdk.listGroupMembers(destination.groupId))
+      : await call(() => sdk.listEnterpriseMembers(destination.entId));
+    (members || []).forEach((member) => {
+      const account = member.account || {
+        id: member.account_id,
+        username: `user_${member.account_id}`,
+      };
+      const option = document.createElement("option");
+      option.value = String(member.account_id ?? account.id);
+      option.textContent = VS.displayName(account);
+      uploadAssignee.append(option);
+    });
+    // 默认指派给自己：这批图通常就是自己领下来的活
+    const mine = [...uploadAssignee.options].find(
+      (option) => String(option.value) === String(activeAccount?.id)
+    );
+    if (mine) uploadAssignee.value = mine.value;
+  } catch {
+    /* 拉不到成员就保持「不指派」，不挡住上传 */
+  }
+}
+
+function syncUploadDestination() {
+  const destination = currentDestination();
+  const toPersonal = destination.kind === "personal";
+  if (uploadAssigneeWrap) uploadAssigneeWrap.hidden = toPersonal;
+  if (!toPersonal) loadAssignees(destination);
+  if (uploadOptionsHint) {
+    uploadOptionsHint.textContent = toPersonal
+      ? "这批图片会进入个人空间；选人工标注会直接进入「我的任务」。"
+      : `这批图片会放进「${destination.name}」的默认工作区，被指派的人会在个人空间看到它。`;
+  }
+  if (confirmAnalysis) {
+    const manual = uploadMode?.value === "manual";
+    confirmAnalysis.innerHTML = manual ? "确认并创建标注任务 <span>→</span>" : "确认并开始分析 <span>→</span>";
+  }
+}
+
+uploadSpace?.addEventListener("change", syncUploadDestination);
+uploadMode?.addEventListener("change", syncUploadDestination);
+
+/* 设置里的「上传偏好」：只是把默认值记到本地，每次上传仍可临时改 */
+const prefUploadMode = document.querySelector("#prefUploadMode");
+const prefUploadSpace = document.querySelector("#prefUploadSpace");
+const uploadPrefStatus = document.querySelector("#uploadPrefStatus");
+
+function renderUploadPref() {
+  const pref = readUploadPref();
+  if (prefUploadMode) prefUploadMode.value = pref.mode;
+  syncPrefSpaceOptions();
+  if (prefUploadSpace) {
+    prefUploadSpace.value = [...prefUploadSpace.options].some((option) => option.value === pref.space)
+      ? pref.space
+      : "personal";
+  }
+}
+
+prefUploadMode?.addEventListener("change", () => {
+  writeUploadPref({ mode: prefUploadMode.value });
+  if (uploadMode) uploadMode.value = prefUploadMode.value;
+  syncUploadDestination();
+  VS.status(uploadPrefStatus, "已记住这个默认方式");
+});
+
+prefUploadSpace?.addEventListener("change", () => {
+  writeUploadPref({ space: prefUploadSpace.value });
+  if (uploadSpace) {
+    uploadSpace.value = [...uploadSpace.options].some((option) => option.value === prefUploadSpace.value)
+      ? prefUploadSpace.value
+      : "personal";
+  }
+  syncUploadDestination();
+  VS.status(uploadPrefStatus, "已记住这个默认目标");
+});
+
+settingsDialog.addEventListener("vision:open", () => {
+  renderUploadPref();
+  VS.status(uploadPrefStatus, "");
+});
+
 confirmAnalysis.addEventListener("click", async () => {
   const files = [...selectedFiles];
   if (!files.length) return;
@@ -1387,33 +2213,21 @@ confirmAnalysis.addEventListener("click", async () => {
     return;
   }
 
-  // 同时在小组与企业里时，先问这批图归哪 —— 不同目标走完全不同的链路，
-  // 猜错会让图片落到错误的空间，所以宁可多问一次。
-  let groups = [];
-  let enterprises = [];
-  try {
-    [groups, enterprises] = await Promise.all([
-      sdk.listGroups().catch(() => []),
-      sdk.listEnterprises().catch(() => []),
-    ]);
-  } catch {
-    /* 探测失败就走默认的个人工作台，不打断主流程 */
-  }
-  if ((groups || []).length && (enterprises || []).length) {
-    const destination = await askUploadTarget(groups, enterprises);
-    if (!destination) return;
-    if (destination !== "personal") {
-      await sendFilesTo(files, destination, groups, enterprises);
-      return;
-    }
-  }
+  const destination = currentDestination();
+  const mode = uploadMode?.value === "manual" ? "manual" : "auto";
+  const assignee = Number(uploadAssignee?.value) || null;
 
   confirmAnalysis.disabled = true;
   confirmAnalysis.textContent = "正在上传…";
-  uploadFeedback.textContent = `正在导入 ${files.length} 个已确认文件…`;
+  uploadFeedback.textContent = `正在导入 ${files.length} 个文件到${destination.name}…`;
 
   try {
-    const project = await ensureImageProject();
+    // 目标项目：个人空间用当前工作区，小组 / 企业用它们各自的默认工作区
+    const project = destination.kind === "personal"
+      ? await ensureImageProject()
+      : await window.VSProjects?.ensureProjectFor?.(destination.kind, destination.groupId);
+    if (!project) throw new Error("这个空间还没有可用的工作区，请联系空间管理员");
+
     let importedCount = 0;
     const importedImages = [];
     // 后端单次最多 20 张，这里按批切分，逐批提交
@@ -1424,28 +2238,51 @@ confirmAnalysis.addEventListener("click", async () => {
       importedCount += list.length;
       importedImages.push(...list);
     }
-    confirmAnalysis.textContent = "正在提交模型分析…";
-    uploadFeedback.textContent = "图片已导入，正在创建自动分析任务…";
-    await submitAnalysisTask(project, importedImages, targets);
+    confirmAnalysis.textContent = mode === "manual" ? "正在创建标注任务…" : "正在提交模型分析…";
+    uploadFeedback.textContent = mode === "manual"
+      ? "图片已导入，正在创建人工标注任务…"
+      : "图片已导入，正在创建自动分析任务…";
+    await submitUploadTask(project, importedImages, { mode, targets, assignee });
     renderProjectTargets(targets);
     analysisTargetsDirty = false;
     selectedFiles = [];
     renderSelection();
-    uploadFeedback.textContent = `已导入 ${importedCount} 张图片，模型分析任务已提交`;
-    showUploadToast(`已提交 ${importedCount} 张图片`, "模型正在分析，结果会自动更新到图像数据");
+    uploadFeedback.textContent = mode === "manual"
+      ? `已导入 ${importedCount} 张，人工标注任务已建好`
+      : `已导入 ${importedCount} 张图片，模型分析任务已提交`;
+    showUploadToast(
+      `已提交 ${importedCount} 张图片`,
+      mode === "manual"
+        ? "在「我的任务」里点开就能画框"
+        : `模型正在分析，结果会出现在${destination.name}`
+    );
     // 列表在后台刷新；即使这一步失败也不该把"上传成功"改成报错
-    loadImages({ force: true }).catch(() => {});
+    if (destination.kind === "personal") {
+      loadImages({ force: true }).catch(() => {});
+      // 上传完把视线带到图片列表，否则用户还停在选择区，看不到新提交的图
+      window.setTimeout(() => {
+        document.querySelector("#personalDataTitle")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 320);
+    } else {
+      window.VSTeam?.refreshResults?.();
+      window.VSTeamEnterprise?.refresh?.();
+    }
+    // 任务可能落在别的空间，但「我的任务」永远在个人空间，统一刷一次
+    window.VSProjects?.refreshPersonal?.();
   } catch (error) {
     uploadFeedback.textContent = error.message === "Failed to fetch" ? "后端尚未启动，请稍后重试" : error.message;
   } finally {
     confirmAnalysis.disabled = false;
-    confirmAnalysis.innerHTML = "确认并开始分析 <span>→</span>";
+    syncUploadDestination();
   }
 });
 
 goToData.addEventListener("click", () => {
   hideUploadToast();
-  showView("images");
+  // 上传只能发生在项目页的「图像」tab，这里只做页内定位
+  window.setTimeout(() => {
+    document.querySelector("#personalDataTitle")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 80);
 });
 
 ["dragenter", "dragover"].forEach((eventName) => {
@@ -1548,8 +2385,25 @@ sendToGroup.addEventListener("click", () => {
 
 // 小组成果通过 content_hash 找回个人图库中的原图 id，沿用真实分析状态与标注。
 // 这是当前远端没有“服务端共享原图”接口时的前端桥接，不伪造任何状态。
+/** 从小组 / 企业页点「上传图片」：切到个人空间的上传区，预设目标后打开选文件。 */
+async function startUpload(kind, id) {
+  showView("personal");
+  await refreshUploadOptions();
+  const value = `${kind}:${id}`;
+  if ([...uploadSpace.options].some((option) => option.value === value)) {
+    uploadSpace.value = value;
+    syncUploadDestination();
+  }
+  imageUpload.click();
+}
+
 window.VSApp = {
   openImageDetail,
+  loadProject,
+  /** 个人空间没有项目页，由 projects.js 直接把默认工作区挂到 activeProject 上。 */
+  focusProject: loadProject,
+  refreshUploadOptions,
+  startUpload,
   async findPersonalImage(image) {
     if (!image) return null;
     if (!imagesLoaded) await loadImages({ force: false }).catch(() => []);
@@ -1559,10 +2413,7 @@ window.VSApp = {
   },
 };
 
-showView("workspace");
-loadImages().catch((error) => {
-  showStatus("暂时无法连接后端", error.message);
-});
+showView("personal");
 
 // 有企业身份就点亮 Logo 旁的分隔栏与头像徽章。纯装饰，失败静默。
 sdk

@@ -301,9 +301,54 @@
   function renderAll() {
     computeStats();
     renderMembers();
+    renderSpacePeople();
     renderFilter();
     renderResults();
     renderMeta();
+  }
+
+  // 空间页首屏的成员预览：头像 + 名字，头衔只跟在名字后面，不压在头像上。
+  // 完整成员管理（改角色、移除）仍在「空间设置 → 小组成员与图库」里。
+  function renderSpacePeople() {
+    const box = $("#teamPeople");
+    if (!box) return;
+    // 成果回到页面后，左栏信息卡里已经有完整成员列表，这条横条就是重复一遍
+    if (grid && !grid.hidden) {
+      box.hidden = true;
+      box.replaceChildren();
+      return;
+    }
+    if (!membersReady || !members.length) {
+      box.hidden = true;
+      box.replaceChildren();
+      return;
+    }
+    box.hidden = false;
+
+    const head = el("div", "space-people-head");
+    const title = el("strong", "", "成员");
+    title.append(el("b", "", String(members.length)));
+    head.append(title);
+    if (canManage) {
+      const manage = el("button", "text-button", "管理成员");
+      manage.type = "button";
+      manage.addEventListener("click", () => $("#manageMembers")?.click());
+      head.append(manage);
+    }
+
+    const row = el("div", "space-people-row");
+    orderedMembers().slice(0, 8).forEach((member) => {
+      const account = member.account || { username: `账号 ${member.account_id}` };
+      const roleLabel = ROLE_LABEL[member.role] || member.role;
+      const chip = el("span", "space-person");
+      if (member.account_id === me?.id) chip.classList.add("is-me");
+      chip.append(avatarNode(account, 26), el("small", "", displayName(account)));
+      if (member.role !== "member") chip.append(el("em", `role-tag role-${member.role}`, roleLabel));
+      chip.title = `${displayName(account)} · ${roleLabel}`;
+      row.append(chip);
+    });
+    if (members.length > 8) row.append(el("span", "space-person-more", `还有 ${members.length - 8} 人`));
+    box.replaceChildren(head, row);
   }
 
   function renderResults() {
@@ -545,7 +590,15 @@
 
   /* ---------------- 上传图片到小组 ---------------- */
 
-  $("#uploadToTeam").addEventListener("click", () => $("#teamUploadInput").click());
+  // 上传到小组也要能分析：转到个人空间的上传区，那里可以选自动 / 人工与指派，
+  // 不再走「先归档、再去图像数据重新上传」的两步。
+  $("#uploadToTeam").addEventListener("click", () => {
+    if (window.VSApp?.startUpload && current?.id) {
+      window.VSApp.startUpload("team", current.id);
+      return;
+    }
+    $("#teamUploadInput").click();
+  });
 
   $("#teamUploadInput").addEventListener("change", async (event) => {
     const files = [...event.target.files];

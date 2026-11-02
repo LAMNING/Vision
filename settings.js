@@ -2,8 +2,9 @@
 // 所有请求走 VS.sdk，不在这里拼 URL。
 (() => {
   const $ = (selector) => document.querySelector(selector);
-  const profileDialog = $("#profileDialog");
-  const { status, runForm, submitButtonOf, sdk, call, forgetAvatar, fillAvatar } = VS;
+  // 资料、外观、密码现在是同一个设置弹窗里的三节
+  const settingsDialog = $("#settingsDialog");
+  const { status, runForm, submitButtonOf, sdk, call, forgetAvatar, fillAvatar, el } = VS;
   let me = null;
 
   const AVATAR_LIMIT = 4 * 1024 * 1024;
@@ -21,12 +22,6 @@
     });
     const editor = $(".avatar-editor");
     if (editor) editor.hidden = !avatar;
-
-    const desc = profile
-      ? "可以修改展示名称与联系方式。用户名作为登录账号暂不更改。"
-      : "可以修改联系方式与登录密码。用户名作为登录账号暂不更改。";
-    const descNode = $("#profileDialog .dialog-description");
-    if (descNode) descNode.textContent = desc;
   }
 
   function renderProfile() {
@@ -50,7 +45,7 @@
     }
   }
 
-  profileDialog.addEventListener("vision:open", loadProfile);
+  settingsDialog.addEventListener("vision:open", loadProfile);
 
   // 资料改完要同步三处：顶栏、小组页成员条、本弹窗自己的头像区
   function broadcast() {
@@ -110,17 +105,33 @@
     }
   });
 
-  $("#removeAvatar").addEventListener("click", async () => {
+  // 移除头像是个可逆的小动作（重新上传即可），不值得弹红色危险卡。
+  // 和删图一致：按钮原地进入确认态，再点一次才真正执行，4.5 秒没点就自己恢复。
+  let removeArmed = false;
+  let removeTimer = 0;
+  const removeAvatarButton = $("#removeAvatar");
+  const removeAvatarLabel = removeAvatarButton ? removeAvatarButton.textContent : "";
+
+  function resetRemoveArm() {
+    if (!removeAvatarButton) return;
+    removeArmed = false;
+    clearTimeout(removeTimer);
+    removeAvatarButton.classList.remove("is-armed");
+    removeAvatarButton.textContent = removeAvatarLabel;
+  }
+
+  removeAvatarButton?.addEventListener("click", async () => {
     if (!me) return;
-    const confirmed = await window.confirmDanger({
-      kicker: "REMOVE AVATAR",
-      title: "移除当前头像？",
-      message: "移除后，头像位置会显示用户名首字。",
-      detail: "账号资料和已上传的图像不会受到影响。",
-      confirmText: "确认移除",
-    });
-    if (!confirmed) return;
-    const button = $("#removeAvatar");
+    if (!removeArmed) {
+      removeArmed = true;
+      removeAvatarButton.textContent = "确认移除";
+      removeAvatarButton.classList.add("is-armed");
+      clearTimeout(removeTimer);
+      removeTimer = window.setTimeout(resetRemoveArm, 4500);
+      return;
+    }
+    resetRemoveArm();
+    const button = removeAvatarButton;
     button.disabled = true;
     try {
       await call(() => sdk.deleteAvatar());
@@ -155,4 +166,155 @@
       window.setTimeout(VS.signOut, 900);
     });
   });
+
+  /* ---------------- 抽屉分区 ---------------- */
+
+  const hubBody = document.querySelector(".settings-hub-body");
+
+  function showPane(name) {
+    if (!hubBody) return;
+    hubBody.querySelectorAll(".settings-nav-item").forEach((button) => {
+      const on = button.dataset.settingsPane === name;
+      button.classList.toggle("is-active", on);
+      if (on) button.setAttribute("aria-current", "true");
+      else button.removeAttribute("aria-current");
+    });
+    hubBody.querySelectorAll(".settings-pane").forEach((pane) => {
+      pane.classList.toggle("is-active", pane.dataset.pane === name);
+    });
+    if (name === "space") loadSpaces();
+  }
+
+  if (hubBody) {
+    hubBody.querySelector(".settings-nav")?.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-settings-pane]");
+      if (button) showPane(button.dataset.settingsPane);
+    });
+  }
+
+  /* ---------------- 企业与小组 ---------------- */
+
+  const ROLE_TEXT = {
+    owner: "所有者", admin: "管理员", manager: "项目管理员",
+    reviewer: "复核员", annotator: "标注员", member: "成员", guest: "只读访客",
+  };
+
+  // 后端 app/data 里的角色等级是写死的，这里如实说明，不做成假开关
+  const PERMISSION_ROWS = [
+    ["所有者 / 管理员", true, true, true],
+    ["复核员", true, true, false],
+    ["标注员", true, false, false],
+    ["成员", true, false, false],
+    ["只读访客", false, false, false],
+  ];
+
+  let spacesLoaded = false;
+
+  function permissionTable() {
+    const wrap = el("div", "settings-perm-wrap");
+    const table = el("table", "settings-perm-table");
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    ["角色", "上传", "复核", "管成员"].forEach((label) => headRow.append(el("th", "", label)));
+    thead.append(headRow);
+    const tbody = document.createElement("tbody");
+    PERMISSION_ROWS.forEach(([role, upload, review, manage]) => {
+      const tr = document.createElement("tr");
+      tr.append(el("td", "", role));
+      [upload, review, manage].forEach((ok) => {
+        tr.append(el("td", ok ? "settings-perm-yes" : "settings-perm-no", ok ? "可" : "—"));
+      });
+      tbody.append(tr);
+    });
+    table.append(thead, tbody);
+    wrap.append(table);
+    wrap.append(el("p", "settings-perm-note", "角色等级由后端固定，这里只说明谁能做什么，不能直接改。"));
+    return wrap;
+  }
+
+  function spaceCard(title, meta, onOpen) {
+    const card = el("div", "settings-space-card");
+    const copy = el("span", "settings-space-card-copy");
+    copy.append(el("strong", "", title), el("small", "", meta));
+    const button = el("button", "secondary-button", "空间设置");
+    button.type = "button";
+    button.addEventListener("click", onOpen);
+    card.append(copy, button);
+    return card;
+  }
+
+  function heading(text) {
+    const row = el("div", "settings-space-heading");
+    row.append(el("strong", "", text));
+    return row;
+  }
+
+  /** 统一抽屉里不重做一套空间设置，直接把人送回原空间并把那边的设置打开。 */
+  function jumpToSpace(kind) {
+    document.querySelector("#closeSettingsDialog")?.click();
+    const rail = document.querySelector(kind === "enterprise" ? "#railEnterprise" : "#railTeam");
+    rail?.click();
+    window.setTimeout(() => {
+      if (kind === "enterprise") {
+        document.querySelector("#entSettingsButton")?.click();
+        return;
+      }
+      // 小组 header 现在是齿轮直接开设置，不用先点「更多」再点菜单项
+      document.querySelector("#teamSpaceSettings")?.click();
+    }, 800);
+  }
+
+  async function loadSpaces(force = false) {
+    const body = document.querySelector("#settingsSpaceBody");
+    if (!body) return;
+    if (spacesLoaded && !force) return;
+    spacesLoaded = true;
+    body.replaceChildren(el("p", "settings-status", "正在读取你所在的企业与小组…"));
+
+    const [enterprises, groups] = await Promise.all([
+      call(() => sdk.listEnterprises()).catch(() => []),
+      call(() => sdk.listGroups()).catch(() => []),
+    ]);
+
+    const frag = document.createDocumentFragment();
+
+    const entBlock = el("div", "settings-space-group");
+    entBlock.append(heading("企业"));
+    if (!(enterprises || []).length) {
+      entBlock.append(el("p", "settings-space-empty", "还没有加入任何企业"));
+    } else {
+      enterprises.forEach((ent) => {
+        const meta = [
+          ROLE_TEXT[ent.my_role] || ent.my_role || "成员",
+          `${ent.member_count ?? 0} 名成员`,
+          `企业码 ${ent.code}`,
+        ].join(" · ");
+        entBlock.append(spaceCard(ent.name, meta, () => jumpToSpace("enterprise")));
+      });
+    }
+    frag.append(entBlock);
+
+    const teamBlock = el("div", "settings-space-group");
+    teamBlock.append(heading("小组"));
+    if (!(groups || []).length) {
+      teamBlock.append(el("p", "settings-space-empty", "还没有加入任何小组"));
+    } else {
+      groups.forEach((group) => {
+        const meta = `${group.type === "enterprise" ? "企业小组" : "小组"} · 图片配额 ${group.quota_images ?? "—"} 张`;
+        teamBlock.append(spaceCard(group.name, meta, () => jumpToSpace("team")));
+      });
+    }
+    frag.append(teamBlock);
+
+    const permBlock = el("div", "settings-space-group");
+    permBlock.append(heading("成员权限"), permissionTable());
+    frag.append(permBlock);
+
+    body.replaceChildren(frag);
+  }
+
+  window.VSSettings = {
+    showPane,
+    refreshSpaces: () => loadSpaces(true),
+  };
 })();
