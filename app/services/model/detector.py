@@ -149,6 +149,13 @@ class LLMDet:
             )
         opts = ort.SessionOptions()
         opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        # 内存池默认开启：它会把大块内存一次要到手反复复用，比每次重新申请更抗碎片化。
+        # （之前关掉过一版，实测在这台内存吃紧的机器上更容易 bad allocation，已回退。）
+        # 但 arena 只涨不还：连续推理几张后峰值（约 5G）会长期占住，
+        # 16G 机器上第二张就可能报 bad allocation。需要时可让 IMAGELABEL_LLMDET_ARENA=0
+        # 改成逐次申请/释放，峰值回落快、代价是慢一点。
+        if os.environ.get("IMAGELABEL_LLMDET_ARENA", "1") == "0":
+            opts.enable_cpu_mem_arena = False
         self.session = ort.InferenceSession(self.onnx_path, opts, providers=self.providers)
 
     # ------------------------------------------------------------------ input

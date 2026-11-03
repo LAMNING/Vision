@@ -18,10 +18,16 @@ message instead).
 """
 from __future__ import annotations
 
+import gc
+import logging
 import os
+import threading
+import time
 from functools import lru_cache
 
 from app.services.model import LLMDet
+
+logger = logging.getLogger(__name__)
 
 DETECTOR_ONNX_ENV = 'IMAGELABEL_LLMDET_ONNX'
 DETECTOR_DIR_ENV = 'IMAGELABEL_LLMDET_DIR'
@@ -31,12 +37,17 @@ DETECTOR_SIZE_ENV = 'IMAGELABEL_LLMDET_SIZE'
 DETECTOR_MAX_SIZE_ENV = 'IMAGELABEL_LLMDET_MAX_SIZE'
 TRANSLATOR_DIR_ENV = 'IMAGELABEL_MARIAN_DIR'
 TRANSLATOR_PRECISION_ENV = 'IMAGELABEL_MARIAN_PRECISION'
+# 多久没有推理就把模型卸掉（秒）；0 = 常驻不卸载。
+IDLE_RELEASE_ENV = 'IMAGELABEL_MODEL_IDLE_SECONDS'
 
 DEFAULT_PRECISION = 'fp16'
 DEFAULT_DEVICE = 'cpu'
 DEFAULT_SIZE = 800
 DEFAULT_MAX_SIZE = 1333
 DEFAULT_TRANSLATOR_PRECISION = 'fp32'
+# 默认 3 分钟：这台 16G 机器上检测模型常驻约 1.2–1.5G，留着会把可用内存吃光，
+# 下一张图就 "bad allocation"。空闲超过这个时间就把 session 放掉。
+DEFAULT_IDLE_RELEASE_SECONDS = 180.0
 
 PRECISIONS = ('fp32', 'fp16')
 DEVICES = ('cpu', 'cuda', 'auto')
@@ -50,6 +61,12 @@ MODEL_FILES = {
 
 # 平台管理员在 DB 里保存的覆盖值（None/缺省 = 跟随环境变量）。
 _override: dict[str, object] = {}
+
+# 空闲卸载的状态：最后一次真正跑推理的 monotonic 时间，以及上次释放的时间。
+# 用锁是因为 worker 线程和可能的接口线程都会碰它。
+_idle_lock = threading.Lock()
+_last_used = 0.0
+_last_released_at = 0.0
 
 
 class DetectorNotConfiguredError(RuntimeError):
@@ -200,11 +217,135 @@ def get_translator():
 
 
 # --------------------------------------------------------------------------- #
+# idle release (free RAM when nobody is annotating)
+# --------------------------------------------------------------------------- #
+def idle_release_seconds() -> float:
+    '''多久没有推理就卸载模型；0 表示常驻（不自动释放）。
+
+    这台机器只有 16G，检测模型（fp16）载入后常驻 1.2–1.5G，人一多就容易
+    在 GridSample/MatMul 上 bad allocation。空闲时把 session 放掉最稳。
+    '''
+    raw = os.environ.get(IDLE_RELEASE_ENV, '').strip()
+    if not raw:
+        return DEFAULT_IDLE_RELEASE_SECONDS
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        logger.warning('%s=%r 不是数字，按默认 %.0fs', IDLE_RELEASE_ENV, raw,
+                       DEFAULT_IDLE_RELEASE_SECONDS)
+        return DEFAULT_IDLE_RELEASE_SECONDS
+    return max(0.0, value)
+
+
+def mark_models_used() -> None:
+    '''记录「刚刚用过模型」。推理前后都要调，否则空闲计时会从加载那刻算起。'''
+    global _last_used
+    with _idle_lock:
+        _last_used = time.monotonic()
+
+
+def models_loaded() -> bool:
+    return (
+        get_detector.cache_info().currsize > 0
+        or get_translator.cache_info().currsize > 0
+    )
+
+
+def models_idle_for() -> float | None:
+    '''已经空闲多少秒；从没跑过推理时返回 None。'''
+    with _idle_lock:
+        if _last_used <= 0:
+            return None
+        return max(0.0, time.monotonic() - _last_used)
+
+
+def _rss_mb() -> float:
+    '''当前进程常驻内存（MB）；取不到就返回 0，只影响日志。'''
+    try:
+        if os.name == 'nt':
+            import ctypes
+            from ctypes import wintypes
+
+            class _Counters(ctypes.Structure):
+                _fields_ = [
+                    ('cb', wintypes.DWORD),
+                    ('PageFaultCount', wintypes.DWORD),
+                    ('PeakWorkingSetSize', ctypes.c_size_t),
+                    ('WorkingSetSize', ctypes.c_size_t),
+                    ('QuotaPeakPagedPoolUsage', ctypes.c_size_t),
+                    ('QuotaPagedPoolUsage', ctypes.c_size_t),
+                    ('QuotaPeakNonPagedPoolUsage', ctypes.c_size_t),
+                    ('QuotaNonPagedPoolUsage', ctypes.c_size_t),
+                    ('PagefileUsage', ctypes.c_size_t),
+                    ('PeakPagefileUsage', ctypes.c_size_t),
+                ]
+
+            psapi = ctypes.windll.psapi
+            kernel32 = ctypes.windll.kernel32
+            psapi.GetProcessMemoryInfo.argtypes = [
+                wintypes.HANDLE, ctypes.POINTER(_Counters), wintypes.DWORD,
+            ]
+            psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
+            kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+            counters = _Counters()
+            counters.cb = ctypes.sizeof(counters)
+            ok = psapi.GetProcessMemoryInfo(
+                kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb
+            )
+            return (counters.WorkingSetSize / 1048576.0) if ok else 0.0
+        import resource
+
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+    except Exception:  # 只用于日志，绝不能让卸载流程因此失败
+        return 0.0
+
+
+def release_idle_models(*, now: float | None = None) -> list[str]:
+    '''空闲超过阈值就丢掉已加载的 session；返回被释放的模型名。
+
+    调用点必须是「确定当前没有推理在跑」的地方（worker 主循环）。释放后
+    下一次标注要重新加载（本机约 20–40 秒），这是拿回 1G+ 内存的代价。
+    '''
+    limit = idle_release_seconds()
+    if limit <= 0:
+        return []
+
+    global _last_used, _last_released_at
+    with _idle_lock:
+        if not models_loaded() or _last_used <= 0:
+            return []
+        idle = (time.monotonic() if now is None else now) - _last_used
+        if idle < limit:
+            return []
+
+        before = _rss_mb()
+        released: list[str] = []
+        if get_detector.cache_info().currsize > 0:
+            get_detector.cache_clear()
+            released.append('detector')
+        if get_translator.cache_info().currsize > 0:
+            get_translator.cache_clear()
+            released.append('translator')
+        _last_used = 0.0
+        _last_released_at = time.monotonic()
+
+    # 锁外回收：onnxruntime 的 arena 要等引用归零 + gc 才真正还给系统。
+    gc.collect()
+    after = _rss_mb()
+    logger.info(
+        '模型空闲 %.0fs（阈值 %.0fs），已释放 %s：进程内存 %.0f MB -> %.0f MB',
+        idle, limit, '/'.join(released) or '无', before, after,
+    )
+    return released
+
+
+# --------------------------------------------------------------------------- #
 # diagnostics
 # --------------------------------------------------------------------------- #
 def detector_status() -> dict:
     """Small dict for /health-style diagnostics (never loads the session)."""
     path = detector_path()
+    idle_for = models_idle_for()
     return {
         'configured': path is not None,
         'path': path,
@@ -217,10 +358,18 @@ def detector_status() -> dict:
         'translator_dir': translator_path(),
         'translator_precision': translator_precision(),
         'translator_loaded': get_translator.cache_info().currsize > 0,
+        'idle_release_seconds': idle_release_seconds(),
+        'idle_for_seconds': idle_for,
+        'last_release_seconds_ago': (
+            max(0.0, time.monotonic() - _last_released_at) if _last_released_at > 0 else None
+        ),
     }
 
 
 def reset_detector_cache() -> None:
     """Drop cached sessions (tests / config change)."""
+    global _last_used
+    with _idle_lock:
+        _last_used = 0.0
     get_detector.cache_clear()
     get_translator.cache_clear()

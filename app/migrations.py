@@ -80,6 +80,8 @@ def needs_stamp() -> bool:
 # 只加列、不改类型、不加索引——够用且在各方言上都安全（默认值必须是常量）。
 _ADDED_COLUMNS: tuple[tuple[str, str, str], ...] = (
     ('task', 'review_required', 'BOOLEAN NOT NULL DEFAULT 1'),
+    ('task', 'started_at', 'DATETIME'),
+    ('task', 'processed_at', 'DATETIME'),
 )
 
 

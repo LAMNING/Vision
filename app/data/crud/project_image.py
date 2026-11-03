@@ -78,6 +78,11 @@ def image_progress(db: Session, project_id: int) -> dict[int, dict]:
                 'task_name': None,
                 'task_mode': None,
                 'task_image_id': None,
+                'task_status': None,
+                'task_created_at': None,
+                'task_started_at': None,
+                'task_processed_at': None,
+                'task_completed_at': None,
                 'can_annotate': False,
                 'can_review': False,
                 # 逐任务的提交人 / 被指派人：列表层要用它复刻 _can_edit_annotations，
@@ -111,6 +116,11 @@ def image_progress(db: Session, project_id: int) -> dict[int, dict]:
             item['task_name'] = task.name
             item['task_mode'] = task.mode
             item['task_image_id'] = int(row.id)
+            item['task_status'] = task.status
+            item['task_created_at'] = task.created_at
+            item['task_started_at'] = task.started_at
+            item['task_processed_at'] = task.processed_at
+            item['task_completed_at'] = task.completed_at
             item['can_annotate'] = bucket == 'editable'
             item['can_review'] = bucket == 'reviewable'
             item['task_submitter_id'] = task.submitter_account_id

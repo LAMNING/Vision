@@ -74,6 +74,12 @@ def _model_read(setting) -> ModelConfigRead:
         translator_configured=bool(status.get('translator_configured')),
         detector_loaded=bool(status.get('loaded')),
         translator_loaded=bool(status.get('translator_loaded')),
+        idle_release_seconds=float(
+            status.get('idle_release_seconds')
+            or detector_service.DEFAULT_IDLE_RELEASE_SECONDS
+        ),
+        idle_for_seconds=status.get('idle_for_seconds'),
+        last_release_seconds_ago=status.get('last_release_seconds_ago'),
         updated_at=setting.updated_at,
     )
 

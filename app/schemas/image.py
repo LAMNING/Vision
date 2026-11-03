@@ -71,5 +71,15 @@ class ProjectImageRead(ImageRead):
     task_name: str | None = None
     task_mode: str | None = None
     task_image_id: int | None = None
+    # 任务原始状态（queued / auto_annotating / auto_annotated / rejected_fix /
+    # rejected_reannotate / approved / failed / cancelled / draft）。
+    # stage 是给筛选用的合并态，只有 6 个值；列表要显示「排队中 / 模型分析中」
+    # 这类更细的文案，就得把任务状态本身带下来。
+    task_status: str | None = None
+    # 任务起止时间：前端用它算「分析中 · 12 秒」，避免长时间没有反馈看起来像卡死
+    task_created_at: datetime | None = None
+    task_started_at: datetime | None = None
+    task_processed_at: datetime | None = None
+    task_completed_at: datetime | None = None
     can_annotate: bool = False
     can_review: bool = False

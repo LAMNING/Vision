@@ -1828,7 +1828,9 @@ async function openImageDetail(image, options = {}) {
   requestAnimationFrame(() => detailView.classList.add("is-visible"));
 
   try {
-    const { blob } = await call(() => sdk.imageContent(image.id));
+    // 企业图对象的 id 是关联行 id，真实图片是 image_id；个人/小组图 id 即图片 id。
+    const contentImageId = image.image_id != null ? image.image_id : image.id;
+    const { blob } = await call(() => sdk.imageContent(contentImageId));
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = URL.createObjectURL(blob);
     detailImage.src = previewUrl;

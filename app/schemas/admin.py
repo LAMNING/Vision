@@ -140,6 +140,11 @@ class ModelConfigRead(BaseModel):
     translator_configured: bool
     detector_loaded: bool
     translator_loaded: bool
+    # 空闲自动卸载：多少秒没推理就释放模型；0 = 常驻。idle_for_seconds 为 None
+    # 表示还没跑过推理（或刚释放完）。
+    idle_release_seconds: float = 0.0
+    idle_for_seconds: float | None = None
+    last_release_seconds_ago: float | None = None
     detector_path_exists: bool = False
     translator_dir_exists: bool = False
     updated_at: datetime | None

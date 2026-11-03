@@ -349,6 +349,14 @@ def create_task(
     if assignee_account_id is not None:
         _assert_assignee(db, project.id, assignee_account_id)
 
+    # 自动标注任务默认记在提交者名下。不指派人的话「我的任务」（默认按 assignee 过滤）
+    # 永远看不到它，模型跑完就石沉大海；人工任务不兜底——那种必须显式指派给谁。
+    # 兜底不发自派通知（自己指派给自己没有意义），否则每次上传都多一条提醒。
+    implicit_assignee = False
+    if assignee_account_id is None and mode == 'auto':
+        assignee_account_id = submitter_account_id
+        implicit_assignee = True
+
     reviewer_id = resolve_reviewer(
         db, project, submitter_account_id, reviewer_account_id
     )
@@ -382,7 +390,7 @@ def create_task(
         after=audit.snapshot(task),
     )
 
-    if assignee_account_id is not None:
+    if assignee_account_id is not None and not implicit_assignee:
         _notify_assigned(db, task, commit=False)
 
     if commit:
@@ -489,6 +497,10 @@ def transition_task(
 
     if to_status in TERMINAL_TASK_STATUSES:
         values['completed_at'] = utcnow()
+    if to_status in ('auto_annotated', 'failed'):
+        # 标注阶段到此结束（成功或失败都算）：图片列表的「用时」以它为准，
+        # 而不是 completed_at —— 那要等复核通过才有值。
+        values['processed_at'] = utcnow()
 
     before = {'status': from_status, 'version': task.version}
     result = db.execute(
@@ -697,6 +709,8 @@ def claim_queued_task(
                 status='auto_annotating',
                 worker_id=worker_id,
                 locked_until=now + timedelta(seconds=lease),
+                # 用例时长的起点：排队等待不计入，只有真正开始跑推理才算
+                started_at=now,
                 version=Task.version + 1,
             )
             .execution_options(synchronize_session=False)

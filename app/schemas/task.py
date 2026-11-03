@@ -90,6 +90,10 @@ class TaskRead(ORMModel):
     version: int
     review_required: bool = True
     created_at: datetime
+    # worker 开始处理的时间；排队中/未提交时为 null，用它算「标注用时」
+    started_at: datetime | None = None
+    # 标注跑完（成功或失败）的时间；completed_at 要等复核通过
+    processed_at: datetime | None = None
     completed_at: datetime | None
 
 
@@ -132,8 +136,8 @@ class ImageTaskRef(ORMModel):
     can_review: bool = False
 
 
-class MyTaskRead(TaskRead):
-    '''跨项目的「我的任务」：附带项目名，方便列表展示。'''
+class MyTaskRead(TaskListItem):
+    '''跨项目的「我的任务」：附带项目名与图片进度，方便列表展示。'''
 
     project_name: str | None = None
 

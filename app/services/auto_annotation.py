@@ -20,6 +20,34 @@ from app.services.model.detector import merge_candidate_labels
 DETERMINERS = ('a', 'an', 'the', 'some', 'this', 'that', 'these', 'those')
 TRANSLATE_STYLES = ('phrase', 'raw')
 
+# 翻译模型把中文「人」译成 people，套上冠词就成了 "a people"——检测器会把这个
+# 短语当成「一群人」这个整体，从而框出一整排人的大框。提示词要的是单数实例名词，
+# 所以加冠词前先把中心词还原成单数。
+IRREGULAR_SINGULARS = {
+    'people': 'person',
+    'men': 'man',
+    'women': 'woman',
+    'children': 'child',
+    'feet': 'foot',
+    'teeth': 'tooth',
+    'mice': 'mouse',
+    'geese': 'goose',
+    'oxen': 'ox',
+}
+
+# 本身就以 s 结尾的单数名词，别被当成复数削掉尾巴
+SINGULAR_ENDS_WITH_S = frozenset({
+    'bus', 'gas', 'glass', 'grass', 'class', 'dress', 'kiss', 'boss', 'lens',
+    'news', 'series', 'species', 'canvas', 'atlas', 'plus', 'virus', 'campus',
+    'status', 'physics', 'mathematics', 'tennis', 'chess',
+})
+
+# 只有复数形式的成对/集合名词：保持复数、不加冠词（"a glasses" 比裸词更糟）
+PLURAL_ONLY = frozenset({
+    'glasses', 'sunglasses', 'scissors', 'pants', 'trousers', 'jeans', 'shorts',
+    'goggles', 'clothes', 'headphones', 'earphones',
+})
+
 # 同一物体被多个 prompt 各框一次时，这些框几乎完全重合（实测 0.81–0.99）；
 # 真正互相重叠的不同物体（人骑马之类）通常只有 0.4–0.6。取 0.8 只砍重复、不砍真重叠。
 IOU_DEDUPE = 0.8
@@ -79,13 +107,69 @@ class PromptSpec:
 # --------------------------------------------------------------------------- #
 # prompt building
 # --------------------------------------------------------------------------- #
+def _singular(noun: str) -> str:
+    """把名词还原成单数；认不出来就原样返回（宁可不改，也别造出 "glasse" 这种怪词）。"""
+    word = noun.strip()
+    low = word.lower()
+    if low in IRREGULAR_SINGULARS:
+        return IRREGULAR_SINGULARS[low]
+    if len(low) <= 3 or low in SINGULAR_ENDS_WITH_S or low in PLURAL_ONLY:
+        return word
+    if low.endswith('ies') and len(low) > 4:
+        return word[:-3] + 'y'
+    if low.endswith(('ses', 'xes', 'zes', 'ches', 'shes')):
+        return word[:-2]
+    if low.endswith('oes') and len(low) > 4:
+        return word[:-2]
+    if low.endswith('s') and not low.endswith(('ss', 'us', 'is', 'as')):
+        return word[:-1]
+    return word
+
+
+def _singular_phrase(phrase: str) -> str:
+    """只动中心词（短语最后一个词）：'fire hydrants' -> 'fire hydrant'。
+
+    'pair of shoes' 这类 of 结构不动——中心词不在最后，动了反而错。
+    """
+    words = phrase.split()
+    if not words or 'of' in words:
+        return phrase
+    words[-1] = _singular(words[-1])
+    return ' '.join(words)
+
+
+def _match_article(phrase: str) -> str:
+    """a/an 跟着后面的词走：单数化之后 'a apple' 要变成 'an apple'。"""
+    head, _, rest = phrase.partition(' ')
+    if head in ('a', 'an') and rest:
+        return f'{"an" if rest[0] in "aeiou" else "a"} {rest}'
+    return phrase
+
+
+def normalize_english(text: str) -> str:
+    """规范化已有的英文提示词：只修「自己带了 a/an 而中心词是复数」的那种。
+
+    用户手填的裸词（'cars'、'traffic light'）原样保留，那是他自己选定的检测口径；
+    但 'a people' 既不合语法、又会让检测器框出一整排人的大框，必须拉回单数。
+    """
+    phrase = ' '.join((text or '').strip().rstrip('.').split()).lower()
+    if not phrase:
+        return ''
+    if phrase.split()[0] in ('a', 'an'):
+        return _match_article(_singular_phrase(phrase))
+    return phrase
+
+
 def as_english_phrase(text: str) -> str:
     """'Cat'/'Remote control' -> 'a cat'/'a remote control' (GroundingDINO likes phrases)."""
-    phrase = text.strip().rstrip('.').strip().lower()
+    phrase = ' '.join(text.strip().rstrip('.').split()).lower()
     if not phrase:
         return ''
     if phrase.split()[0] in DETERMINERS:
+        return normalize_english(phrase)
+    if phrase in PLURAL_ONLY:
         return phrase
+    phrase = _singular_phrase(phrase)
     return ('an ' if phrase[0] in 'aeiou' else 'a ') + phrase
 
 
@@ -130,7 +214,8 @@ def build_prompts(
     for index, category in enumerate(enabled):
         written = ' '.join(category.en_name.strip().split()).lower()
         if written:
-            prompt = written
+            # 老项目里可能已经存成 'a people'（旧翻译直接写进了 en_name），这里一起纠正
+            prompt = normalize_english(written)
             source = 'en_name'
         else:
             prompt = _normalize_translation(translations[index], config.translate_style)  # type: ignore[index]

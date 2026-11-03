@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.data import Account, Group, Image, Project, Task, TaskImage
 from app.data.crud import audit as audit_crud
+from app.data.crud import enterprise as enterprise_crud
 from app.data.crud import image as image_crud
 from app.data.crud import project as project_crud
 from app.data.crud import project_image as project_image_crud
@@ -424,6 +425,10 @@ def upload_project_images(
 
     图片仍落在项目所属的组里（额度、去重按组算），再挂到项目上；
     同组里已有同 sha256 的图会复用记录，不会重复存 blob。
+
+    项目挂在企业背后的隐藏组（org）上时，同步把图片挂进企业图库
+    （``EnterpriseImage`` 关联），否则从企业空间上传的图只进项目、
+    企业图库永远看不到（「图片无法同步」的根因）。
     '''
     access = require_upload(db, account, project_id)
 
@@ -431,6 +436,20 @@ def upload_project_images(
         raise ValidationError('没有选择文件')
     if len(files) > MAX_BATCH_FILES:
         raise ValidationError(f'一次最多上传 {MAX_BATCH_FILES} 张图片')
+
+    # 企业隐藏组（org）：找到对应企业与上传者角色，用于建立企业图库关联
+    group = get_group(db, access.project.group_id)
+    enterprise = None
+    enterprise_review_status = None
+    if group is not None and group.type == 'org':
+        enterprise = enterprise_crud.get_enterprise_by_group(db, group.id)
+        if enterprise is not None:
+            role = enterprise_crud.enterprise_role_for_group(
+                db, group.id, account.id
+            )
+            enterprise_review_status = enterprise_crud.initial_review_status(
+                enterprise, role or 'member'
+            )
 
     # 先把整批校验完，再动存储和数据库：半途出错不会留下垃圾 blob
     payloads: list[tuple[str, bytes]] = []
@@ -473,6 +492,16 @@ def upload_project_images(
                 added_by_account_id=account.id,
                 commit=False,
             )
+            # 企业隐藏组：同时挂进企业图库，走与「企业直接上传」一致的审核流
+            if enterprise is not None:
+                enterprise_crud.link_image(
+                    db,
+                    enterprise_id=enterprise.id,
+                    image_id=image.id,
+                    uploader_account_id=account.id,
+                    review_status=enterprise_review_status or 'pending',
+                    commit=False,
+                )
             if linked:
                 audit_crud.record(
                     db,
@@ -545,6 +574,11 @@ def list_project_images(
                     'task_name': info.get('task_name'),
                     'task_mode': info.get('task_mode'),
                     'task_image_id': info.get('task_image_id'),
+                    'task_status': info.get('task_status'),
+                    'task_created_at': info.get('task_created_at'),
+                    'task_started_at': info.get('task_started_at'),
+                    'task_processed_at': info.get('task_processed_at'),
+                    'task_completed_at': info.get('task_completed_at'),
                     'can_annotate': may_annotate,
                     'can_review': bool(info.get('can_review')) and access.can_review,
                 }

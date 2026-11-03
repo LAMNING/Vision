@@ -100,6 +100,12 @@ class Task(BasicModel):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utcnow
     )
+    # worker 真正开始处理的那一刻（claim 时写入）。created_at 是建 draft 的时间，
+    # 中间还隔着排队和等待，用它算「用时」会把等待时间也算进去。
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # 本次处理结束的时刻（auto_annotated / failed 时写入）。completed_at 只给终态
+    # （approved / cancelled）用，标注跑完还没复核完，所以这里单记一个。
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     project: Mapped['Project'] = relationship(back_populates='tasks')

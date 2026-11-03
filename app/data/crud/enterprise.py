@@ -114,6 +114,13 @@ def account_can_view_group(db: Session, group_id: int, account_id: int) -> bool:
     return enterprise_role_for_group(db, group_id, account_id) is not None
 
 
+def get_enterprise_by_group(db: Session, group_id: int) -> Enterprise | None:
+    '''按企业背后的隐藏组 id 反查企业。'''
+    return db.scalar(
+        select(Enterprise).where(Enterprise.group_id == group_id).limit(1)
+    )
+
+
 def enterprise_role_for_group(
     db: Session, group_id: int, account_id: int
 ) -> str | None:

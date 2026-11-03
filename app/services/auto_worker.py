@@ -42,6 +42,9 @@ from app.services.detector import (
     TranslatorNotConfiguredError,
     get_detector,
     get_translator,
+    idle_release_seconds,
+    mark_models_used,
+    release_idle_models,
 )
 
 logger = logging.getLogger(__name__)
@@ -60,6 +63,9 @@ DEFAULT_MAX_PIXELS = 40_000_000
 
 # 回收租约过期任务的扫描间隔（秒）
 RECOVERY_INTERVAL = 60.0
+
+# 空闲卸载的检查间隔（秒）：真正卸载还要等 idle_release_seconds（默认 180s）
+IDLE_CHECK_INTERVAL = 15.0
 
 
 class LeaseLostError(RuntimeError):
@@ -164,6 +170,7 @@ def annotate_task(db, task, *, worker_id: str | None = None) -> int:
     db.commit()
 
     detector = get_detector()
+    mark_models_used()
     specs = category_specs(categories)
     # 有英文提示词的类目直接用，只有空着的那几个才需要翻译（见 build_prompts）。
     need_translation = any(not spec.en_name.strip() for spec in specs)
@@ -187,6 +194,8 @@ def annotate_task(db, task, *, worker_id: str | None = None) -> int:
                 translator,
                 timeout=timeout,
             )
+            # 每张图都刷新空闲计时：一个任务标 20 张要几十分钟，不能从加载那刻算。
+            mark_models_used()
             annotation_crud.replace_current(
                 db, row, items, source='auto', commit=False
             )
@@ -289,9 +298,10 @@ class AutoAnnotateWorker:
         )
         self._thread.start()
         logger.info(
-            'auto annotate worker started (id=%s interval=%.2fs)',
+            'auto annotate worker started (id=%s interval=%.2fs idle_release=%.0fs)',
             self.worker_id,
             self.interval,
+            idle_release_seconds(),
         )
         return self
 
@@ -311,6 +321,7 @@ class AutoAnnotateWorker:
 
     def _loop(self) -> None:
         last_recovery = 0.0
+        last_idle_check = 0.0
         while not self._stop.is_set():
             try:
                 now = time.monotonic()
@@ -320,6 +331,11 @@ class AutoAnnotateWorker:
                 with database.SessionLocal() as db:
                     if process_one(db, worker_id=self.worker_id):
                         continue  # 还有活就立刻接着干，不等轮询
+                # 确认这一轮真的没活，再考虑放模型：否则刚卸完就来了任务，
+                # 白白多付一次 20–40 秒的加载时间。
+                if now - last_idle_check >= IDLE_CHECK_INTERVAL:
+                    last_idle_check = now
+                    release_idle_models()
             except Exception:  # 单轮异常不能让线程退出
                 logger.exception('auto annotate worker loop error')
             self._stop.wait(self.interval)

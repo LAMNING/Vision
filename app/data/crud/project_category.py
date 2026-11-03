@@ -19,9 +19,9 @@ def _translate_en(zh_name: str) -> str:
     from app.services.detector import get_translator, translator_configured
 
     if not translator_configured():
-        raise InvalidCategoryError(
-            '没有配置翻译模型（IMAGELABEL_MARIAN_DIR），请直接填英文提示词'
-        )
+        # 没装翻译模型时不要阻断整个上传：直接拿中文名当提示词。
+        # 本来这一步只是「让英文提示词更好」，不该因为它把建类目 / 建任务整条链路卡死。
+        return zh_name[:MAX_EN_NAME]
     translated = get_translator().translate_many([zh_name])[0]
     return as_english_phrase(translated)[:MAX_EN_NAME]
 
