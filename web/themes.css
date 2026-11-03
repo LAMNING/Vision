@@ -1621,3 +1621,12 @@ html[data-color-scheme="dark"] .image-row.is-picked {
 html[data-color-scheme="dark"] .image-row.is-picked:hover {
   background: color-mix(in srgb, var(--accent) 32%, var(--surface));
 }
+
+/* ---- 登录页品牌名 ----
+   名字从 Vision Studio 换成中文后，原来的全大写字距（.11em）会把中文拉散，
+   这里收一下字距、把灰度提一档，让它像个平台名而不是一行注脚。 */
+.auth-showcase .eyebrow {
+  color: var(--ink-2);
+  font-size: 13px;
+  letter-spacing: .04em;
+}

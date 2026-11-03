@@ -504,6 +504,27 @@
 
   /* ---------------- 选图 / 加载框 ---------------- */
 
+  /**
+   * 等图片可用。不用 img.decode()：它在部分环境（无头浏览器、后台标签页、
+   * 图片未参与渲染时）会一直 pending，等待它的代码就永远走不下去 ——
+   * 表现就是工作台停在「正在加载图片…」、保存按钮一直是灰的。
+   * 这里只看 complete/naturalWidth，没有就等 load/error，最多等 3 秒兜底。
+   */
+  function waitImageReady(img) {
+    if (img.complete && img.naturalWidth) return Promise.resolve();
+    return new Promise((resolve) => {
+      const finish = () => {
+        img.removeEventListener("load", finish);
+        img.removeEventListener("error", finish);
+        window.clearTimeout(timer);
+        resolve();
+      };
+      const timer = window.setTimeout(finish, 3000);
+      img.addEventListener("load", finish);
+      img.addEventListener("error", finish);
+    });
+  }
+
   function normalizeBox(raw) {
     const { w, h } = natural();
     if (!Array.isArray(raw) || raw.length < 4) return [0, 0, 0, 0];
@@ -511,6 +532,8 @@
     if (![x0, y0, x1, y1].every(Number.isFinite)) return [0, 0, 0, 0];
     if (x0 > x1) [x0, x1] = [x1, x0];
     if (y0 > y1) [y0, y1] = [y1, y0];
+    // 图片尺寸还没读到就原样返回：夹到 0 会把用户的框全抹平，宁可先按原值放着
+    if (!w || !h) return [x0, y0, x1, y1];
     return [clamp(x0, 0, w), clamp(y0, 0, h), clamp(x1, 0, w), clamp(y1, 0, h)];
   }
 
@@ -559,7 +582,7 @@
       const url = await fullUrl(image.id);
       if (token !== state.token) return;
       img.src = url;
-      await img.decode().catch(() => {});
+      await waitImageReady(img);
       if (token !== state.token) return;
       await loadBoxes(row);
       if (token !== state.token) return;

@@ -827,7 +827,10 @@
 
   function scheduleTaskPoll(tasks) {
     stopTaskPoll();
-    const running = (tasks || []).filter((t) => t.status === "queued" || t.status === "auto_annotating");
+    // 人工任务的 queued 是「等人来标」，不会自己变；盯着刷只是白请求
+    const running = (tasks || []).filter((t) =>
+      (t.status === "queued" && t.mode !== "manual") || t.status === "auto_annotating"
+    );
     if (!running.length) { taskPollCount = 0; return; }
     if (taskPollCount >= TASK_POLL_LIMIT) return;
     taskPollTimer = window.setTimeout(async () => {

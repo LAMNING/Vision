@@ -1,4 +1,4 @@
-// Vision Studio — 页面逻辑
+// 灵视标注平台 — 页面逻辑
 // 主线：校验登录态 → 上传图片 → 读取图像列表 → 查看 / 删除详情
 // 交互：右侧工具轨悬停展开，退出按钮分裂成卡片、三段式收回
 // 后端调用一律走 VS.sdk，本文件不出现 fetch。
@@ -303,9 +303,9 @@ function showView(view) {
     setAppContext({ ...context });
     projectRole.hidden = true;
     projectArchive.hidden = true;
-    document.title = `${context.title} · Vision Studio`;
+    document.title = `${context.title} · 灵视标注平台`;
   } else if (view === "project") {
-    document.title = `${appContextTitle.textContent} · Vision Studio`;
+    document.title = `${appContextTitle.textContent} · 灵视标注平台`;
   }
   projectBack.hidden = view !== "project";
   // 空间页与项目页都是多栏布局，需要比首页更宽的画布
@@ -1252,6 +1252,24 @@ const TASK_LABELS = {
   failed: "分析失败",
   cancelled: "分析已取消",
 };
+// 人工任务和模型没关系：同一套状态码，说人话得换一套词。
+// 后端把「人工标完」也记成 auto_annotated（进复核），照搬会显示成「分析完成」，
+// 看起来就像手动任务被偷偷丢给模型了。
+const MANUAL_TASK_LABELS = {
+  draft: "正在准备标注任务",
+  queued: "等待人工标注",
+  auto_annotating: "正在标注",
+  auto_annotated: "标注完成 · 待复核",
+  approved: "标注已通过",
+  rejected_fix: "等待修正",
+  rejected_reannotate: "等待退回重标",
+  failed: "标注失败",
+  cancelled: "标注已取消",
+};
+
+function taskLabels(mode) {
+  return mode === "manual" ? MANUAL_TASK_LABELS : TASK_LABELS;
+}
 
 function analysisText(imageId) {
   const state = analysisByImage.get(Number(imageId));
@@ -1261,7 +1279,8 @@ function analysisText(imageId) {
     const labels = state.labels.slice(0, 3).join("、");
     return `分析完成 · ${state.count} 个标注${labels ? ` · ${labels}` : ""}`;
   }
-  return state.error ? `${TASK_LABELS[state.status] || state.status} · ${state.error}` : (TASK_LABELS[state.status] || state.status);
+  const labels = taskLabels(state.mode);
+  return state.error ? `${labels[state.status] || state.status} · ${state.error}` : (labels[state.status] || state.status);
 }
 
 function updateAnalysisLabels() {
@@ -1305,19 +1324,22 @@ function renderAnnotationOverlay(imageId) {
 }
 
 function applyTaskState(task) {
+  const manual = task.mode === "manual";
   (task.images || []).forEach((row) => {
     const existing = analysisByImage.get(row.image_id);
     if (existing?.kind === "result" && ["auto_annotated", "approved"].includes(task.status)) return;
     // 任务已经跑完、这张图也标成 annotated，却一条标注都没有：
     // 说明模型确实没检出目标，写「未发现目标」比停在「分析完成」更准确。
+    // 人工任务不适用这条：框少是标注员的选择，说「没发现目标」会误导。
     const finished = ["auto_annotated", "approved"].includes(task.status);
-    if (finished && row.annotation_status === "annotated") {
+    if (!manual && finished && row.annotation_status === "annotated") {
       analysisByImage.set(row.image_id, { kind: "result", count: 0, labels: [], items: [] });
       return;
     }
     analysisByImage.set(row.image_id, {
       kind: "task",
       status: task.status,
+      mode: task.mode || "auto",
       error: task.error_message || (row.annotation_status === "failed" ? "该图片处理失败" : ""),
     });
   });
@@ -1369,7 +1391,8 @@ async function loadAnalysisState(project) {
 
   if (!task) return;
   applyTaskState(task);
-  if (ACTIVE_TASK_STATES.has(task.status)) scheduleTaskPoll(project.id, task.id);
+  // 人工任务的状态只会因为标注员操作而变，轮询没有意义
+  if (ACTIVE_TASK_STATES.has(task.status) && task.mode !== "manual") scheduleTaskPoll(project.id, task.id);
 }
 
 function scheduleTaskPoll(projectId, taskId, failures = 0) {
@@ -1380,14 +1403,19 @@ function scheduleTaskPoll(projectId, taskId, failures = 0) {
     if (currentView !== "project" || !activeProject || activeProject.id !== projectId) return;
     try {
       const task = await call(() => sdk.getTask(projectId, taskId));
+      const manual = task.mode === "manual";
       applyTaskState(task);
       if (["auto_annotated", "approved"].includes(task.status)) {
         await loadAnnotationResults(projectId);
-        showUploadToast("分析完成", "结果与标注已写入图像数据");
+        if (manual) {
+          showUploadToast("标注完成", "已提交复核，可在「我的任务」里查看");
+        } else {
+          showUploadToast("分析完成", "结果与标注已写入图像数据");
+        }
       }
       updateAnalysisLabels();
-      if (ACTIVE_TASK_STATES.has(task.status)) scheduleTaskPoll(projectId, taskId, 0);
-      else if (task.status === "failed") showUploadToast("分析失败", task.error_message || "请检查模型服务后重试");
+      if (ACTIVE_TASK_STATES.has(task.status) && !manual) scheduleTaskPoll(projectId, taskId, 0);
+      else if (task.status === "failed") showUploadToast(manual ? "标注失败" : "分析失败", task.error_message || "请稍后重试");
     } catch {
       if (failures < 12) scheduleTaskPoll(projectId, taskId, failures + 1);
       else showUploadToast("状态更新中断", "网络恢复后重新打开图像数据即可继续查看");
@@ -1607,7 +1635,7 @@ async function submitUploadTask(project, images, { mode = "auto", targets = [], 
   const submitted = await call(() => sdk.submitTask(project.id, task.id));
   localStorage.setItem(`vision_recent_task_${project.id}`, String(task.id));
   images.forEach((image) => analysisByImage.set(image.id, { kind: "task", status: submitted.status }));
-  if (ACTIVE_TASK_STATES.has(submitted.status)) scheduleTaskPoll(project.id, task.id);
+  if (ACTIVE_TASK_STATES.has(submitted.status) && mode !== "manual") scheduleTaskPoll(project.id, task.id);
   return submitted;
 }
 
@@ -1703,6 +1731,23 @@ targetSettingsForm.addEventListener("submit", async (event) => {
 
 let detailCloseTimer = 0;
 
+// 和 annotate.js 里的同名函数一个道理：img.decode() 在部分环境会永久 pending，
+// 等它会让标注叠加层永远画不出来。只看 complete/naturalWidth，等 load/error，3 秒兜底。
+function waitImageReady(img) {
+  if (img.complete && img.naturalWidth) return Promise.resolve();
+  return new Promise((resolve) => {
+    const finish = () => {
+      img.removeEventListener("load", finish);
+      img.removeEventListener("error", finish);
+      window.clearTimeout(timer);
+      resolve();
+    };
+    const timer = window.setTimeout(finish, 3000);
+    img.addEventListener("load", finish);
+    img.addEventListener("error", finish);
+  });
+}
+
 async function openImageDetail(image, options = {}) {
   clearTimeout(detailCloseTimer);
   resetInlineDelete();
@@ -1787,7 +1832,7 @@ async function openImageDetail(image, options = {}) {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = URL.createObjectURL(blob);
     detailImage.src = previewUrl;
-    await detailImage.decode().catch(() => {});
+    await waitImageReady(detailImage);
     renderAnnotationOverlay(currentImageContext.analysisImageId);
   } catch {
     detailTitle.textContent = "图片预览加载失败";

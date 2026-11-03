@@ -1,4 +1,4 @@
-// Vision Studio — 公共层
+// 灵视标注平台 — 公共层
 // 全站唯一的后端入口：sdk.js。业务脚本不再自己写 fetch。
 // 这里只做四件事：建 SDK 实例、把错误翻成中文、缓存头像、提供几个 DOM 小工具。
 window.VS = (() => {
@@ -157,7 +157,7 @@ window.VS = (() => {
     // 非 SDK 异常（TypeError、RangeError 之类）的 message 是英文的开发者信息，
     // 直接显示会很突兀。界面统一给中文，原文留在控制台方便排查。
     if (!isSdkError(error)) {
-      if (error && error.message) console.warn("[Vision Studio] 未预期的异常：", error);
+      if (error && error.message) console.warn("[灵视标注平台] 未预期的异常：", error);
       return new Error("操作没有成功，请稍后重试");
     }
     if (error.status === 401) return new Error("登录已失效，请重新登录");
